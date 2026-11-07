@@ -79,6 +79,9 @@ export function renderCalendar(ctx) {
     )
   );
 
+  // ----- At a glance: what is still to do (today and future days) -----
+  if (selected >= today) view.append(glancePanel(ctx, slots, { selected, today }));
+
   view.append(legend());
 
   // ----- Day timeline (phones) and week grid (wide screens) -----
@@ -108,6 +111,71 @@ export function renderCalendar(ctx) {
 }
 
 // ---------- Pieces ----------
+
+/**
+ * "At a glance": everything still to do on the day, grouped by kind, each time a
+ * tappable chip in its status colour. Exercises get an explicit line even when
+ * none are cleared, so an empty calendar never reads as "no exercises today".
+ */
+function glancePanel(ctx, slots, { selected, today }) {
+  const { state } = ctx;
+  const tz = state.profile.timezone || DEFAULT_TZ;
+  const now = ctx.now();
+  const isToday = selected === today;
+  const planned = slots.filter((s) => ['medication', 'exercise', 'ice_elevate', 'checkin'].includes(s.kind));
+  const isLeft = (s) => ['todo', 'due', 'upcoming', 'in_progress', 'open'].includes(s.status);
+  const left = planned.filter(isLeft);
+  const done = planned.filter((s) => s.status === 'done' || s.status === 'skipped');
+  const { cleared, pending } = partitionExercises(state.orders);
+
+  const panel = el('div', { class: 'glance', 'aria-label': 'At a glance' });
+  const head = el('div', { class: 'glance-head' }, el('span', { class: 'eyebrow', text: isToday ? (left.length ? 'Still to do today' : 'Today') : 'Planned' }));
+  const next = isToday ? nextActionable(slots, now) : null;
+  if (next && next.at) {
+    const mins = Math.round((next.at - now) / 60000);
+    const when = mins > 1 ? `in ${mins >= 90 ? `${Math.round(mins / 60)} h` : `${mins} min`}` : mins < -1 ? `${-mins >= 90 ? `${Math.round(-mins / 60)} h` : `${-mins} min`} ago` : 'now';
+    head.append(el('span', { class: 'muted small', text: `${next.status === 'in_progress' ? 'In progress' : next.status === 'todo' ? 'Not recorded' : 'Next'}: ${cap(next.short)} · ${formatTime(next.at, tz)} (${when})` }));
+  }
+  panel.append(head);
+
+  const chipFor = (s, withName) => {
+    const b = el('button', { type: 'button', class: `glance-chip pill-${s.status}${s.unconfirmed && !['done', 'skipped', 'in_progress'].includes(s.status) ? ' pill-unconfirmed' : ''}`, 'aria-label': `${s.title}, ${formatTime(s.at, tz)}, ${STATUS_LABELS[s.status] || s.status}`, onclick: () => openSlotSheet(ctx, s) });
+    b.append(el('span', { class: 'glance-chip-dot', 'aria-hidden': 'true' }));
+    b.append(`${withName ? `${cap(s.short)} ` : ''}${formatTime(s.at, tz)}`);
+    if (s.status === 'done') b.append(' ✓');
+    return b;
+  };
+  const row = (iconName, label, content) => el('div', { class: 'glance-row' }, el('span', { class: 'glance-label' }, icon(iconName, 'icon icon-sm'), label), el('div', { class: 'glance-chips' }, ...(Array.isArray(content) ? content : [content])));
+  const allDoneNote = (what) => el('span', { class: 'glance-ok', text: `${what} done ✓` });
+
+  // Scheduled medicines, by medicine
+  const medsLeft = left.filter((s) => s.kind === 'medication');
+  const medsDone = done.filter((s) => s.kind === 'medication');
+  if (medsLeft.length) panel.append(row('meds', 'Meds', medsLeft.map((s) => chipFor(s, true))));
+  else if (medsDone.length) panel.append(row('meds', 'Meds', allDoneNote(medsDone.length === 1 ? 'Scheduled dose' : 'All scheduled doses')));
+
+  // Exercises: cleared ones by session; otherwise say plainly why there are none
+  const exLeft = left.filter((s) => s.kind === 'exercise');
+  const exDone = done.filter((s) => s.kind === 'exercise');
+  if (exLeft.length) panel.append(row('move', 'Exercises', exLeft.map((s) => chipFor(s, true))));
+  else if (exDone.length) panel.append(row('move', 'Exercises', allDoneNote('Cleared exercises')));
+  else if (!cleared.length) panel.append(row('move', 'Exercises', el('span', { class: 'muted small' }, pending.length ? `None cleared yet — ${pending.length} from your paperwork ${pending.length === 1 ? 'is' : 'are'} waiting on a clinician's OK. ` : 'None cleared yet. ', el('a', { href: '#movement', text: 'Mark cleared in Movement' }))));
+
+  // Ice + elevate
+  const iceLeft = left.filter((s) => s.kind === 'ice_elevate');
+  const iceDone = done.filter((s) => s.kind === 'ice_elevate');
+  if (iceLeft.length) panel.append(row('ice', 'Ice', iceLeft.map((s) => chipFor(s, false))));
+  else if (iceDone.length) panel.append(row('ice', 'Ice', allDoneNote('Ice sessions')));
+
+  // Evening check-in (optional)
+  const ci = planned.filter((s) => s.kind === 'checkin');
+  if (ci.some(isLeft)) panel.append(row('pulse', 'Check-in', ci.filter(isLeft).map((s) => chipFor(s, false))));
+  else if (ci.some((s) => s.status === 'done')) panel.append(row('pulse', 'Check-in', allDoneNote('Check-in')));
+
+  if (!left.length && planned.length) panel.append(el('p', { class: 'glance-ok', text: isToday ? 'Everything planned for today is recorded.' : 'Nothing planned.' }));
+  if (!planned.length) panel.append(el('p', { class: 'muted small', text: 'Nothing scheduled for this day.' }));
+  return panel;
+}
 
 function legend() {
   const item = (status, label) => el('span', { class: `legend-item` }, el('span', { class: `legend-dot pill-${status}` }), label);
