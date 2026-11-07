@@ -52,3 +52,20 @@ The publishable key is designed to be public; the row-level security policy in `
 - Data lives in your project's `records` table. Supabase encrypts at rest and in transit; enable **2FA** on your Supabase account.
 - "Delete my cloud data" in Settings removes every row for your account. Sign other devices out first or they will push their copies back.
 - JSON export/import keeps working and is still the recommended backup.
+
+## Care partners (shared access)
+
+Run [`02_care_circle_and_reminders.sql`](02_care_circle_and_reminders.sql) after `schema.sql`, and turn on **Authentication → Sign In / Providers → Allow anonymous sign-ins**.
+
+- The owner invites a care partner from **Settings → Care partners → Invite a care partner** and texts them the link (`…/#invite=<token>`). Opening it on the partner's phone signs them in (anonymous auth bound to that device) and connects them to the owner's circle — no email, no password. Links are single-use; the owner can revoke access or issue a new link at any time.
+- A care partner sees the owner's calendar, medications, movement and plan, can log entries (each entry records `created_by` = their name), and can turn on reminders for themselves. They cannot see other people's data: row-level security checks `care_circle` membership on every row.
+- If a partner clears their browser data, the owner sends a new link.
+
+## Push reminders
+
+1. Deploy the Edge Function in [`functions/reminders`](functions/reminders) (Edge Functions → Deploy a new function → via editor: paste `index.ts` and `webpush.ts`, name it `reminders`). Turn **Verify JWT** off for this function — the cron calls it with a secret header, and the test path verifies the user's JWT itself.
+2. Add the function secrets: `VAPID_PUBLIC_KEY` (same value as `js/config.js`), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:you@example.com`), `CRON_SECRET` (any long random string).
+3. Schedule it: run the commented cron block at the end of `02_care_circle_and_reminders.sql` with your `CRON_SECRET`.
+4. On each device: **Settings → Reminders on this device → Turn reminders on** (on iPhone the app must be on the Home Screen). "Send a test" confirms delivery.
+
+The function imports the same schedule code the calendar uses (`js/reminders-due.js` via jsDelivr `@main`), so what it sends matches what the pills show: a "Time for …" push within five minutes of a required pill coming due, and — for care partners only — a "Not logged yet" nudge once the pill's grace window has passed. As-needed medicines and the optional check-in never trigger reminders. Each reminder is sent once (`reminder_log`).

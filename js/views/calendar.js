@@ -12,6 +12,7 @@ import { lastConfirmedDose, isScheduleConfirmed } from '../medications.js';
 import { partitionExercises } from '../exercises.js';
 import { HIGH_PRIORITY_SYMPTOMS, ESCALATION_TEXT, PRODUCT_BOUNDARY, weightBearingState, interactionNotices } from '../safety-rules.js';
 import { openCorrectionSheet } from './shared.js';
+import { memberBanner } from './care-ui.js';
 
 let tick = null;
 const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
@@ -48,6 +49,8 @@ export function renderCalendar(ctx) {
 
   if (state.storeVolatile) view.append(el('div', { class: 'banner banner-danger', role: 'alert' }, icon('alert'), el('span', {}, el('strong', { text: 'Storage unavailable. ' }), 'Entries will not survive closing this page. Export anything important from Settings.')));
   if (state.dataLossSuspected) view.append(dataLossPanel(ctx));
+  const banner = memberBanner(ctx);
+  if (banner) view.append(banner);
   if (openQs.length) view.append(el('a', { class: 'banner banner-warning banner-compact', href: '#plan' }, icon('alert'), el('span', {}, el('strong', { text: `${openQs.length} to confirm with clinicians` }), ` · ${openQs.map((q) => q.short || q.topic).join(' · ')}`)));
 
   if (lowEnergy) {

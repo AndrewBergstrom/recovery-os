@@ -50,14 +50,16 @@ export function timePicker(ctx, initialMs, { label = 'When', hint } = {}) {
 
 /** Who is entering this: the patient, or a named care partner (logs always keep the entrant). */
 export function enteredBy(ctx) {
-  const partner = ctx.state.meta?.care_partner?.name;
+  const scope = ctx.state.sync?.scope;
+  const memberMode = scope?.mode === 'member';
+  const partner = memberMode ? scope.memberName : ctx.state.meta?.care_partner?.name;
   if (!partner) return { node: null, get: () => 'patient' };
   const seg = segmented(
     [
-      { id: 'patient', label: 'Me (patient)' },
+      { id: 'patient', label: memberMode ? `${scope.ownerName || 'Patient'} (patient)` : 'Me (patient)' },
       { id: partner, label: `${partner} (care partner)` },
     ],
-    'patient',
+    memberMode ? partner : 'patient',
     null,
     { label: 'Entered by' }
   );

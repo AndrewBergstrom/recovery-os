@@ -4,6 +4,7 @@ import { openStore, KEY_PATHS } from './db.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { createSupabaseClient, createSync } from './sync.js';
 import { readLocalConfig, openSignInSheet, openSyncConfigSheet, syncCard, renderSyncDot } from './views/sync-ui.js';
+import { renderAcceptInvite, inviteToken } from './views/care-ui.js';
 import { loadPrefs, savePrefs, applyPrefs, markHadData, hadData, clearHadData } from './prefs.js';
 import { seedItems, SEED_VERSION, orderKey } from './seed.js';
 import { el, icon, toast, closeAllSheets, confirmDialog, openSheet, button, field } from './ui.js';
@@ -23,7 +24,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.3.3';
+export const APP_VERSION = '0.4.0';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -54,6 +55,7 @@ const state = {
 let store = null;
 let sync = null;
 let onboardingForced = false;
+let pendingInvite = null;
 
 const ctx = {
   state,
@@ -140,6 +142,18 @@ function render() {
   renderHeader();
   renderNav();
   main.setAttribute('aria-busy', 'false');
+  if (pendingInvite) {
+    document.getElementById('app-nav').classList.add('hidden');
+    main.replaceChildren(renderAcceptInvite(ctx, { token: pendingInvite, onAccepted: () => render() }));
+    return;
+  }
+  if (state.sync.scope?.mode === 'member' && !state.meta.activation) {
+    document.getElementById('app-nav').classList.add('hidden');
+    main.replaceChildren(
+      el('section', { class: 'view' }, el('h1', { text: `Connecting to ${state.sync.scope.ownerName || 'their'} recovery…` }), el('p', { class: 'muted', text: 'Pulling the care plan and entries from the cloud. This takes a moment the first time.' }), el('div', { class: 'btn-row' }, button('Sync now', { variant: 'primary', onClick: () => ctx.actions.syncNow() }), button('Leave this care circle', { variant: 'ghost', onClick: () => ctx.actions.leaveCircle() })))
+    );
+    return;
+  }
   if (onboardingForced || !state.meta.activation) {
     document.getElementById('app-nav').classList.add('hidden');
     main.replaceChildren(renderOnboarding(ctx, { onDone: activate, onSignIn: state.sync.configured && !state.sync.signedIn ? () => ctx.actions.openSignIn() : null }));
@@ -196,6 +210,62 @@ Object.assign(ctx.actions, {
   openSyncConfig() {
     return openSyncConfigSheet(ctx);
   },
+  async createInvite({ member_name, member_email, owner_name }) {
+    if (!member_name) throw new Error('Enter their name.');
+    if (!owner_name) throw new Error('Enter your name as they know you.');
+    const row = await sync.client.insert('care_circle', { owner_id: sync.client.userId, owner_name, member_name, member_email: member_email || null, invite_token: inviteToken() });
+    await persist('meta', { key: 'owner_name', name: owner_name });
+    await persist('meta', { key: 'care_partner', name: member_name, consented: true, updated_at: toIso(nowMs()) });
+    return row;
+  },
+  async regenerateInvite(row) {
+    const rows = await sync.client.patch('care_circle', `id=eq.${row.id}`, { invite_token: inviteToken(), revoked_at: null, accepted_at: null, member_id: null });
+    toast('New invite link created — the old one no longer works');
+    return rows[0];
+  },
+  async revokeMember(row) {
+    await sync.client.patch('care_circle', `id=eq.${row.id}`, { revoked_at: toIso(nowMs()), invite_token: null });
+    toast(`${row.member_name}'s access revoked`);
+  },
+  async acceptInvite({ token, name }) {
+    if (!name) throw new Error('Enter your name.');
+    if (!sync.client.session) await sync.client.signInAnonymously();
+    const rows = await sync.client.rpc('accept_invite', { p_token: token, p_name: name });
+    const r = Array.isArray(rows) ? rows[0] : rows;
+    if (!r?.owner_id) throw new Error('The invite could not be accepted.');
+    // This device now belongs to the owner's recovery: start from a clean store, then pull.
+    sync.stop();
+    await store.clear();
+    clearHadData();
+    await ensureSeed();
+    if (r.owner_profile) await store.put('meta', { ...r.owner_profile, key: 'profile' });
+    await sync.setScope({ mode: 'member', ownerId: r.owner_id, ownerName: r.owner_name || '', memberName: r.member_name || name });
+    pendingInvite = null;
+    try {
+      sessionStorage.removeItem('recovery-os:pending-invite');
+    } catch {
+      /* ignore */
+    }
+    sync.status.signedIn = true;
+    sync.status.email = null;
+    await loadState();
+    render();
+    toast(`Connected to ${r.owner_name || 'their'} recovery as ${r.member_name || name}`);
+    sync.start();
+    return r;
+  },
+  async leaveCircle() {
+    const ok = await confirmDialog({ title: 'Leave this care circle?', message: 'Signs this device out and removes the local copy of their recovery. Their record in the cloud is untouched.', confirmText: 'Leave', danger: true });
+    if (!ok) return;
+    sync.stop();
+    await sync.signOut();
+    await store.clear();
+    clearHadData();
+    await ensureSeed();
+    await loadState();
+    location.hash = '#today';
+    render();
+  },
   async syncNow() {
     const r = await sync.syncNow({ reason: 'manual' });
     if (r?.error) toast(`Sync failed: ${r.error}`);
@@ -204,6 +274,7 @@ Object.assign(ctx.actions, {
     refreshSyncCard();
   },
   async signOut() {
+    if (state.sync.scope?.mode === 'member') return ctx.actions.leaveCircle();
     const ok = await confirmDialog({ title: 'Sign out of sync?', message: 'Entries stay on this device. New entries queue here and push the next time you sign in.', confirmText: 'Sign out' });
     if (!ok) return;
     await sync.signOut();
@@ -487,6 +558,14 @@ async function boot() {
   // A magic-link redirect lands here with tokens in the hash. Take them out of the URL first.
   const incomingHash = location.hash && (location.hash.includes('access_token=') || location.hash.includes('error=')) ? location.hash : null;
   if (incomingHash) history.replaceState(null, '', `${location.pathname}${location.search}#today`);
+  const inviteMatch = /[#&]invite=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+  try {
+    if (inviteMatch) sessionStorage.setItem('recovery-os:pending-invite', inviteMatch[1]);
+    pendingInvite = sessionStorage.getItem('recovery-os:pending-invite') || null;
+  } catch {
+    pendingInvite = inviteMatch ? inviteMatch[1] : null;
+  }
+  if (inviteMatch) history.replaceState(null, '', `${location.pathname}${location.search}#today`);
   document.getElementById('skip-link')?.addEventListener('click', (e) => {
     e.preventDefault();
     document.getElementById('main')?.focus();
@@ -514,6 +593,8 @@ async function boot() {
       },
     });
     ctx.sync = sync;
+    await sync.loadScope();
+    state.sync = { ...sync.status };
     if (incomingHash) {
       const err = client.hashError(incomingHash);
       if (err) toast(`Sign-in link problem: ${err.replace(/\+/g, ' ')}`);

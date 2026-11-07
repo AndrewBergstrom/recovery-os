@@ -2,7 +2,7 @@
    Only static assets are cached. No data ever passes through here.
    Bump CACHE_VERSION whenever any file in ASSETS changes. */
 
-const CACHE_VERSION = 'recovery-os-v0.3.3';
+const CACHE_VERSION = 'recovery-os-v0.4.0';
 const ASSETS = [
   './',
   './index.html',
@@ -20,7 +20,9 @@ const ASSETS = [
   './js/export-import.js',
   './js/medications.js',
   './js/prefs.js',
+  './js/push.js',
   './js/reminders.js',
+  './js/reminders-due.js',
   './js/safety-rules.js',
   './js/sample-data.js',
   './js/schedule.js',
@@ -29,6 +31,7 @@ const ASSETS = [
   './js/time.js',
   './js/ui.js',
   './js/views/calendar.js',
+  './js/views/care-ui.js',
   './js/views/medications.js',
   './js/views/more.js',
   './js/views/movement.js',
@@ -89,5 +92,42 @@ self.addEventListener('fetch', (event) => {
         return res;
       })
       .catch(() => caches.match(req))
+  );
+});
+
+// ---------- Push reminders ----------
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'Recovery OS', body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'Recovery OS';
+  const options = {
+    body: data.body || '',
+    tag: data.tag || 'recovery-os',
+    renotify: false,
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    data: { url: data.url || './#today' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || './#today', self.location.href).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const c of clients) {
+        if (c.url.startsWith(self.registration.scope)) {
+          c.focus();
+          if ('navigate' in c) c.navigate(target).catch(() => {});
+          return;
+        }
+      }
+      return self.clients.openWindow(target);
+    })
   );
 });

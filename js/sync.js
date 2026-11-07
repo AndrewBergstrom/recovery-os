@@ -211,13 +211,49 @@ export function createSupabaseClient({ url = '', anonKey = '', fetchImpl = typeo
       session = null;
       save();
     },
+    /** Anonymous session (used by care-partner invite links). Requires "Allow anonymous sign-ins" in the project. */
+    async signInAnonymously() {
+      const data = await request('/auth/v1/signup', { method: 'POST', auth: false, body: {} });
+      if (!data?.access_token) throw new Error('Anonymous sign-in is not enabled for this project.');
+      session = data;
+      save();
+      return session;
+    },
+    get isAnonymous() {
+      return !!session?.user?.is_anonymous;
+    },
+    /** Generic PostgREST helpers for the small side tables (care circle, push subscriptions). */
+    async rpc(name, args = {}) {
+      return request(`/rest/v1/rpc/${name}`, { method: 'POST', body: args });
+    },
+    async select(table, query = '') {
+      const rows = await request(`/rest/v1/${table}${query ? `?${query}` : ''}`);
+      return Array.isArray(rows) ? rows : [];
+    },
+    async insert(table, row) {
+      const rows = await request(`/rest/v1/${table}`, { method: 'POST', body: row, prefer: 'return=representation' });
+      return Array.isArray(rows) ? rows[0] : rows;
+    },
+    async upsertRows(table, rows, onConflict) {
+      return request(`/rest/v1/${table}${onConflict ? `?on_conflict=${onConflict}` : ''}`, { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=representation' });
+    },
+    async patch(table, query, patch) {
+      return request(`/rest/v1/${table}?${query}`, { method: 'PATCH', body: patch, prefer: 'return=representation' });
+    },
+    async remove(table, query) {
+      return request(`/rest/v1/${table}?${query}`, { method: 'DELETE', prefer: 'return=minimal' });
+    },
+    async callFunction(name, { query = '', body = {} } = {}) {
+      return request(`/functions/v1/${name}${query ? `?${query}` : ''}`, { method: 'POST', body });
+    },
     async upsert(rows) {
       if (!rows.length) return;
       await request('/rest/v1/records', { method: 'POST', body: rows, prefer: 'resolution=merge-duplicates,return=minimal' });
     },
-    async fetchRows({ since, limit = PAGE, offset = 0 }) {
+    async fetchRows({ since, limit = PAGE, offset = 0, ownerId = null }) {
       const q = new URLSearchParams();
       q.set('select', 'store,key,payload,deleted,updated_at,synced_at');
+      if (ownerId) q.set('user_id', `eq.${ownerId}`);
       if (since) q.set('synced_at', `gte.${since}`);
       q.set('order', 'synced_at.asc,store.asc,key.asc');
       q.set('limit', String(limit));
@@ -236,7 +272,22 @@ export function createSupabaseClient({ url = '', anonKey = '', fetchImpl = typeo
 // ---------- Sync engine ----------
 
 export function createSync({ store, client, seedDocs = () => [], onStatus = () => {}, onChange = () => {}, now = Date.now, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false) }) {
-  const status = { configured: !!client?.configured, signedIn: !!client?.session, email: client?.email || null, syncing: false, pending: 0, lastSyncAt: null, lastError: null, online: online() };
+  const status = { configured: !!client?.configured, signedIn: !!client?.session, email: client?.email || null, syncing: false, pending: 0, lastSyncAt: null, lastError: null, online: online(), scope: null };
+  let scope = null; // null = owner mode; { mode: 'member', ownerId, ownerName, memberName } = care-partner mode
+  const ownerId = () => scope?.ownerId || client.userId;
+  async function loadScope() {
+    const meta = await store.get('meta', 'sync');
+    scope = meta?.scope || null;
+    status.scope = scope;
+    return scope;
+  }
+  async function setScope(next) {
+    const meta = (await store.get('meta', 'sync')) || { key: 'sync' };
+    scope = next || null;
+    status.scope = scope;
+    await store.put('meta', { ...meta, key: 'sync', scope, cursor: null, backfilled_at: next ? new Date(now()).toISOString() : meta.backfilled_at });
+    emit();
+  }
   let running = false;
   let queued = false;
   let debounce = null;
@@ -274,7 +325,7 @@ export function createSync({ store, client, seedDocs = () => [], onStatus = () =
   async function push() {
     const entries = await store.getAll('outbox');
     if (!entries.length) return 0;
-    const rows = entries.map((e) => rowFromEntry(e, client.userId));
+    const rows = entries.map((e) => rowFromEntry(e, ownerId()));
     for (let i = 0; i < rows.length; i += 200) await client.upsert(rows.slice(i, i + 200));
     for (const e of entries) {
       const current = await store.get('outbox', e.id);
@@ -300,7 +351,7 @@ export function createSync({ store, client, seedDocs = () => [], onStatus = () =
         const id = `${storeName}:${docKey(storeName, doc)}`;
         if (pending.has(id)) continue;
         const seed = seeds.get(id);
-        if (seed && same(seed, doc)) continue;
+        if (seed && same(seed, doc) && storeName !== 'meta') continue; // meta (profile, routine…) always goes up so partners and reminders see the owner's own values
         entries.push({ store: 'outbox', obj: outboxEntry(storeName, doc, { now: now() }) });
       }
     }
@@ -315,7 +366,7 @@ export function createSync({ store, client, seedDocs = () => [], onStatus = () =
     let offset = 0;
     let applied = 0;
     for (let guard = 0; guard < 200; guard++) {
-      const rows = await client.fetchRows({ since: cursor, limit: PAGE, offset });
+      const rows = await client.fetchRows({ since: cursor, limit: PAGE, offset, ownerId: ownerId() });
       if (!rows.length) break;
       const pending = new Map((await store.getAll('outbox')).map((e) => [e.id, e]));
       const localDocs = new Map();
@@ -399,7 +450,7 @@ export function createSync({ store, client, seedDocs = () => [], onStatus = () =
     await client.signOut();
     status.signedIn = false;
     status.email = null;
-    emit();
+    await setScope(null);
   }
 
   function start() {
@@ -431,6 +482,6 @@ export function createSync({ store, client, seedDocs = () => [], onStatus = () =
     await store.put('meta', { ...meta, key: 'sync', cursor: null });
   }
 
-  refreshPending().then(emit);
-  return { status, enqueue, enqueueMany, syncNow, start, stop, afterSignIn, signOut, resetCursor, backfill, client };
+  loadScope().then(() => refreshPending()).then(emit);
+  return { status, enqueue, enqueueMany, syncNow, start, stop, afterSignIn, signOut, resetCursor, backfill, setScope, loadScope, ownerId, client };
 }

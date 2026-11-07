@@ -9,12 +9,15 @@ import { SEED_VERSION } from '../seed.js';
 import { isSample } from '../sample-data.js';
 import { kv } from './shared.js';
 import { syncCard } from './sync-ui.js';
+import { careCircleCard, remindersCard } from './care-ui.js';
 
 export function renderMore(ctx) {
   const { state, actions } = ctx;
   const view = el('section', { class: 'view' });
   view.append(el('h1', { text: 'Settings & backup' }));
   view.append(syncCard(ctx));
+  view.append(remindersCard(ctx));
+  if (state.sync?.scope?.mode !== 'member') view.append(careCircleCard(ctx));
 
   // Display
   const textSize = segmented(TEXT_SIZES.map((s) => ({ id: s, label: { small: 'Small', default: 'Default', large: 'Large', xl: 'Extra large' }[s] })), state.prefs.textSize, (v) => actions.setPref('textSize', v), { label: 'Text size' });

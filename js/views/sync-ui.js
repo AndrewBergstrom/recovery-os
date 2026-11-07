@@ -155,7 +155,8 @@ export function syncCard(ctx) {
     return card;
   }
   const meta = el('div', { class: 'card-meta' });
-  meta.append(el('span', {}, el('strong', { text: 'Account: ' }), st.email || '—'));
+  if (st.scope?.mode === 'member') meta.append(el('span', {}, el('strong', { text: 'Care partner: ' }), `${st.scope.memberName} · connected to ${st.scope.ownerName || 'their'} recovery`));
+  else meta.append(el('span', {}, el('strong', { text: 'Account: ' }), st.email || (st.signedIn ? 'signed in' : '—')));
   meta.append(el('span', {}, el('strong', { text: 'Last sync: ' }), st.lastSyncAt ? relativeAgo(fromIso(st.lastSyncAt), ctx.now()) : 'not yet'));
   meta.append(el('span', {}, el('strong', { text: 'Waiting to push: ' }), String(st.pending || 0)));
   if (!st.online) meta.append(el('span', { class: 'muted', text: 'Offline — will sync when the connection is back.' }));
@@ -164,9 +165,9 @@ export function syncCard(ctx) {
   append(card, [
     el('div', { class: 'btn-row' },
       button(st.syncing ? 'Syncing…' : 'Sync now', { variant: 'primary', disabled: !!st.syncing, onClick: () => actions.syncNow() }),
-      button('Sign out', { onClick: () => actions.signOut() })
+      button(st.scope?.mode === 'member' ? 'Leave care circle' : 'Sign out', { onClick: () => actions.signOut() })
     ),
-    el('details', { class: 'plain' }, el('summary', { text: 'Danger zone' }),
+    st.scope?.mode === 'member' ? null : el('details', { class: 'plain' }, el('summary', { text: 'Danger zone' }),
       el('div', { class: 'details-body' },
         el('p', { class: 'muted small', text: 'Deletes every row for this account in your Supabase project. Devices that are still signed in will push their local copies back up unless you sign them out first.' }),
         el('div', { class: 'btn-row' }, button('Delete my cloud data', { variant: 'danger-soft', onClick: () => actions.deleteCloud() }))

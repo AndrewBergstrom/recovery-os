@@ -21,10 +21,10 @@ Or `npx serve .` — anything that serves the folder as-is.
 ## Tests
 
 ```bash
-node --test tests/*.test.js      # Node 20+ (uses node:test, no packages)
+node --experimental-strip-types --test tests/*.test.js   # Node 22+ (node:test, no packages)
 ```
 
-54 tests cover: sync (two devices exchanging entries, order versions, tombstones; last-write-wins; erase-and-restore; token refresh) via an in-memory stand-in for Supabase; calendar slots and their statuses (upcoming → due → red; PRN never a slot; uncleared exercises never a slot; loose entries attach to the nearest slot); no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
+64 tests cover: care circle + member mode, reminder computation, Web Push crypto (RFC 8291/8292) against an independent receiver; sync (two devices exchanging entries, order versions, tombstones; last-write-wins; erase-and-restore; token refresh) via an in-memory stand-in for Supabase; calendar slots and their statuses (upcoming → due → red; PRN never a slot; uncleared exercises never a slot; loose entries attach to the nearest slot); no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
 
 ## Deploy (GitHub Pages)
 
@@ -51,6 +51,10 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: bl
 ## Cross-device sync (optional, Supabase)
 
 Off by default. When configured, the app stays offline-first: every write lands in IndexedDB, then in an outbox that pushes to a single row-level-secured `records` table in **your own** Supabase project; other signed-in devices pull on open, on foreground and about once a minute. Sign-in is an emailed 6-digit code (no password, no redirect — it works inside the installed PWA). Entries are append-only and never conflict; everything else is last-write-wins by `updated_at`, enforced by a server trigger. Setup: [`supabase/README.md`](supabase/README.md) (schema in [`supabase/schema.sql`](supabase/schema.sql); keys in [`js/config.js`](js/config.js) or Settings → Sync). No SDK — a few `fetch` calls, so the strict CSP and zero-dependency rule still hold.
+
+## Care partners and reminders
+
+A care partner gets their own login through an invite link (no email needed), sees everything, can log entries under their own name, and can turn on push reminders. Reminders come from a Supabase Edge Function on a 5-minute cron that reuses `js/reminders-due.js` — the same schedule as the calendar — so a push arrives when a pill comes due, plus a "not logged yet" nudge to partners after the grace window. Setup in [`supabase/README.md`](supabase/README.md).
 
 ## What Phase 1 includes
 
@@ -91,10 +95,10 @@ Off by default. When configured, the app stays offline-first: every write lands 
 ```
 index.html  styles.css  manifest.webmanifest  sw.js  package.json
 icons/            PNG icons (generated, abstract mark)
-js/               app.js db.js events.js schedule.js sync.js config.js medications.js exercises.js
-                  safety-rules.js reminders.js export-import.js time.js ui.js prefs.js seed.js sample-data.js
-js/views/         calendar medications movement progress plan more onboarding quick-log shared sync-ui
-supabase/         schema.sql  README.md (optional cross-device sync)
+js/               app.js db.js events.js schedule.js sync.js push.js reminders-due.js config.js medications.js
+                  exercises.js safety-rules.js reminders.js export-import.js time.js ui.js prefs.js seed.js sample-data.js
+js/views/         calendar medications movement progress plan more onboarding quick-log shared sync-ui care-ui
+supabase/         schema.sql  02_care_circle_and_reminders.sql  functions/reminders/  README.md
 docs/             SPEC.md  AGENTS.md  care-plan-template.md
 schemas/          recovery-export.schema.json
 tests/            event-log meds safety schedule sync export-import time (node:test; fake-supabase.js stand-in)

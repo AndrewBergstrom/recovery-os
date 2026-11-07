@@ -159,7 +159,7 @@ test('expired access tokens are refreshed transparently; a dead refresh token si
   server.state.expireNext = true; // next REST call returns 401
   const r = await A.sync.syncNow();
   assert.equal(r.error, undefined, 'refresh + retry succeeded');
-  assert.equal(server.count(A.client.userId), 1);
+  assert.equal(server.count(A.client.userId), 2, 'the dose plus the backfilled profile');
   assert.ok(server.state.calls.includes('POST /auth/v1/token'));
   // wrong code is a readable error, not a crash
   await assert.rejects(A.client.signInVerify('andrew@example.com', '000000'), /expired or is invalid/);
@@ -192,7 +192,7 @@ test('link sign-in: pasted magic link and redirect hash both produce a working s
   await B.sync.afterSignIn();
   await write(B, 'events', dose('med-aspirin-81', 81, 1, la('2026-11-07', '08:00')));
   await B.sync.syncNow();
-  assert.equal(server.count(B.client.userId), 1);
+  assert.equal(server.count(B.client.userId), 2, 'the dose plus the backfilled profile');
 });
 
 test('first sync backfills entries that predate sync, but not untouched seed rows', async () => {
@@ -208,7 +208,7 @@ test('first sync backfills entries that predate sync, but not untouched seed row
   assert.equal(await A.store.count('outbox'), 0);
   await signIn(A);
   const uploaded = server.count(A.client.userId);
-  assert.equal(uploaded, 4, 'event + activation + slot state + resolved question; untouched seed orders/questions/milestones/contacts skipped');
+  assert.equal(uploaded, 5, 'event + activation + profile + slot state + resolved question; untouched seed orders/questions/milestones/contacts skipped');
   const stores = new Set([...server.rows.values()].map((r) => r.store));
   assert.deepEqual([...stores].sort(), ['events', 'meta', 'questions', 'slot_states']);
   // backfill runs once; a later sync does not re-queue everything
