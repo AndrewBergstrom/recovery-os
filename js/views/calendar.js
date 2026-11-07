@@ -6,8 +6,8 @@
 
 import { el, chip, button, field, icon, openSheet, confirmDialog, toast } from '../ui.js';
 import { buildDaySlots, deriveStatuses, dayCompletion, nextActionable, prnPills, routineFrom, STATUS_LABELS, GRACE_MINUTES } from '../schedule.js';
-import { daysSinceSurgery, dayLabel, greeting, localDateString, fromIso, formatTime, formatDateLong, formatDateStr, describeWhen, addDays, daysBetween, zonedToUtc, relativeAgo, DEFAULT_TZ } from '../time.js';
-import { describeEvent } from '../events.js';
+import { daysSinceSurgery, dayLabel, greeting, localDateString, localTimeString, fromIso, formatTime, formatDateLong, formatDateStr, describeWhen, addDays, daysBetween, zonedToUtc, relativeAgo, DEFAULT_TZ } from '../time.js';
+import { describeEvent, currentEvents } from '../events.js';
 import { lastConfirmedDose, isScheduleConfirmed } from '../medications.js';
 import { partitionExercises } from '../exercises.js';
 import { HIGH_PRIORITY_SYMPTOMS, ESCALATION_TEXT, PRODUCT_BOUNDARY, weightBearingState, interactionNotices } from '../safety-rules.js';
@@ -170,6 +170,56 @@ function ring(comp) {
   return svg;
 }
 
+
+/** Everything to draw for a day: planned pills (done ones move to the time they actually happened) plus a green pill for every other entry recorded that day. */
+function dayItems(ctx, dateStr, slots) {
+  const { state } = ctx;
+  const tz = state.profile.timezone || DEFAULT_TZ;
+  const byId = ctx.ordersById();
+  const placed = slots.map((s) => {
+    if (s.status === 'done' && s.event) {
+      const at = fromIso(s.event.occurred_at);
+      return { ...s, at, time: localTimeString(at, tz), allDay: false };
+    }
+    return s;
+  });
+  const used = new Set(placed.filter((s) => s.event).map((s) => s.event.id));
+  const records = currentEvents(state.events)
+    .filter((e) => !used.has(e.id) && localDateString(fromIso(e.occurred_at), tz) === dateStr)
+    .map((e) => {
+      const at = fromIso(e.occurred_at);
+      const order = byId[e.medication_id || e.exercise_id];
+      let title;
+      let sub = '';
+      switch (e.event_type) {
+        case 'medication':
+          title = order ? `${cap(order.short_name || order.name)} ${order.display_strength}${e.quantity !== 1 ? ` × ${e.quantity}` : ''}` : e.medication_id;
+          sub = order && order.schedule?.kind === 'prn' ? 'as needed' : 'extra dose';
+          break;
+        case 'ice_elevate':
+          title = e.kind === 'both' ? 'Ice + elevate' : e.kind === 'ice' ? 'Ice' : 'Elevate';
+          sub = e.duration_minutes ? `${e.duration_minutes} min` : '';
+          break;
+        case 'exercise':
+          title = order ? order.name : e.exercise_id;
+          sub = e.status === 'not_today' ? 'not today' : e.status === 'stopped_early' ? 'stopped early' : 'session';
+          break;
+        case 'checkin':
+          title = 'Check-in';
+          sub = e.pain != null ? `pain ${e.pain}/10` : '';
+          break;
+        default:
+          title = e.category && e.category !== 'journal' ? 'Question' : 'Note';
+          sub = (e.text || '').slice(0, 40);
+      }
+      return { id: `rec:${e.id}`, kind: 'record', record_type: e.event_type, event: e, status: e.status === 'not_today' ? 'skipped' : 'done', date: dateStr, at, time: localTimeString(at, tz), title, label: title, short: title, sub, icon: { medication: 'meds', ice_elevate: 'ice', exercise: 'move', checkin: 'pulse', note: 'note' }[e.event_type] || 'note', optional: true, unplanned: true };
+    });
+  return [...placed, ...records].sort((a, b) => {
+    if (!!a.allDay !== !!b.allDay) return a.allDay ? -1 : 1;
+    return (a.at || 0) - (b.at || 0) || a.title.localeCompare(b.title);
+  });
+}
+
 function hourLabel(h) {
   const hh = h % 24;
   return `${hh === 0 ? 12 : hh > 12 ? hh - 12 : hh} ${hh < 12 ? 'AM' : 'PM'}`;
@@ -180,18 +230,19 @@ function dayTimeline(ctx, slots, { selected, today, routine }) {
   const now = ctx.now();
   const tz = state.profile.timezone || DEFAULT_TZ;
   const wrap = el('div', { class: 'cal-day' });
-  const allDay = slots.filter((s) => s.allDay);
+  const items = dayItems(ctx, selected, slots);
+  const allDay = items.filter((s) => s.allDay);
   if (allDay.length) wrap.append(el('div', { class: 'cal-row cal-row-allday' }, el('span', { class: 'cal-time', text: 'All day' }), el('div', { class: 'cal-pills' }, allDay.map((s) => pill(ctx, s)))));
-  const timed = slots.filter((s) => !s.allDay);
-  const startH = routine.day_start_hour ?? 7;
-  const endH = routine.day_end_hour ?? 22;
-  const nowHour = selected === today ? Number(localDateString(now, tz) && new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(new Date(now))) : null;
+  const timed = items.filter((s) => !s.allDay);
+  const nowHour = selected === today ? Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(new Date(now))) : null;
+  const hours = timed.map((s) => Number((s.time || '00:00').slice(0, 2)));
+  const startH = Math.min(routine.day_start_hour ?? 7, ...hours, nowHour ?? 24);
+  const endH = Math.max(routine.day_end_hour ?? 22, ...hours, nowHour ?? -1);
   const byHour = new Map();
   for (const s of timed) {
     const h = Number((s.time || '00:00').slice(0, 2));
-    const key = h < startH ? 'early' : h > endH ? 'late' : h;
-    if (!byHour.has(key)) byHour.set(key, []);
-    byHour.get(key).push(s);
+    if (!byHour.has(h)) byHour.set(h, []);
+    byHour.get(h).push(s);
   }
   const rowFor = (key, label) => {
     const items = byHour.get(key) || [];
@@ -203,10 +254,8 @@ function dayTimeline(ctx, slots, { selected, today, routine }) {
     row.append(pills);
     return row;
   };
-  if (byHour.has('early')) wrap.append(rowFor('early', 'Early'));
   for (let h = startH; h <= endH; h++) wrap.append(rowFor(h, hourLabel(h)));
-  if (byHour.has('late')) wrap.append(rowFor('late', 'Late'));
-  if (!slots.length) wrap.append(el('p', { class: 'muted', text: selected < state.profile.surgery_date ? 'Before surgery — nothing planned.' : 'Nothing planned for this day.' }));
+  if (!items.length) wrap.append(el('p', { class: 'muted', text: selected < state.profile.surgery_date ? 'Before surgery — nothing planned.' : 'Nothing planned for this day.' }));
   return wrap;
 }
 
@@ -238,8 +287,9 @@ function weekGrid(ctx, { selected, today }) {
       comp.total ? el('span', { class: 'cal-col-comp', text: `${comp.done}/${comp.total}` }) : null
     ));
     const list = el('div', { class: 'cal-col-pills' });
-    for (const s of slots) list.append(pill(ctx, s, { compact: true, showTime: true }));
-    if (!slots.length) list.append(el('span', { class: 'muted small', text: d < state.profile.surgery_date ? '—' : 'Nothing planned' }));
+    const items = dayItems(ctx, d, slots);
+    for (const s of items) list.append(pill(ctx, s, { compact: true, showTime: true }));
+    if (!items.length) list.append(el('span', { class: 'muted small', text: d < state.profile.surgery_date ? '—' : 'Nothing planned' }));
     col.append(list);
     cols.append(col);
   }
@@ -291,9 +341,11 @@ export function pill(ctx, slot, { compact = false, big = false, showTime = false
   const now = ctx.now();
   let meta;
   switch (slot.status) {
-    case 'done':
-      meta = slot.event ? `Done ${formatTime(fromIso(slot.event.occurred_at), tz)}` : 'Done';
+    case 'done': {
+      const verb = slot.kind === 'medication' || slot.record_type === 'medication' ? 'Taken' : 'Done';
+      meta = slot.event ? `${verb} ${formatTime(fromIso(slot.event.occurred_at), tz)}${slot.sub && slot.unplanned ? ` · ${slot.sub}` : ''}` : 'Done';
       break;
+    }
     case 'in_progress': {
       const started = fromIso(slot.slotState?.at || slot.slotState?.started_at);
       meta = Number.isFinite(started) ? `In progress · ${Math.max(0, Math.round((now - started) / 60000))} min` : 'In progress';
