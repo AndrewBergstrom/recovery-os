@@ -1,0 +1,93 @@
+# Recovery OS
+
+A personal, local-only knee-surgery recovery tracker. Static HTML/CSS/vanilla JS, installable as a PWA, works offline after the first visit. **Phase 1 (foundation) is implemented; later phases are not.**
+
+> Recovery OS organizes the patient's own entries. It does not give medical advice, diagnose complications or change orders. A clinician's confirmed directions control medications, exercises, restrictions and progression. Conflicting paperwork stays visibly unresolved until a clinician settles it.
+
+Spec: [`docs/SPEC.md`](docs/SPEC.md) · Agent rules: [`docs/AGENTS.md`](docs/AGENTS.md) · Export schema: [`schemas/recovery-export.schema.json`](schemas/recovery-export.schema.json)
+
+## Run locally
+
+No build step and no dependencies.
+
+```bash
+# any static server works; the service worker needs localhost or HTTPS
+python3 -m http.server 8080 --bind 127.0.0.1
+# then open http://127.0.0.1:8080/
+```
+
+Or `npx serve .` — anything that serves the folder as-is.
+
+## Tests
+
+```bash
+node --test tests/*.test.js      # Node 20+ (uses node:test, no packages)
+```
+
+34 tests cover: no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
+
+## Deploy (GitHub Pages)
+
+`.github/workflows/pages.yml` publishes the repo root on every push to `main`. In the repo settings, Pages → Source must be **GitHub Actions** (done once). The site is served over HTTPS, so the service worker and "Add to Home Screen" work.
+
+Any other static host works too. If the host lets you set headers, send this Content-Security-Policy as a header as well as the `<meta>` tag already in `index.html`:
+
+```
+default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+```
+
+**Data placement.** The repo contains the care-plan *orders* transcribed from the paperwork (medication directions, exercise descriptions, open questions) and no identifiers — no name, date of birth, address, MRN or contact details. Real entries (doses, sessions, check-ins, contacts, appointments) live only in the browser's IndexedDB and in backups the patient exports. Never commit an exported backup.
+
+## What Phase 1 includes
+
+- Mobile-first shell with bottom navigation (side navigation ≥ 880 px): **Today · Meds · Movement · Progress · Plan**, plus Settings & backup behind the gear.
+- Onboarding that reviews the care-plan seed (orders, open questions, exercises, restrictions, milestones) before activation. Activation records that the orders were reviewed — never that anything was taken.
+- **Today**: day count, calm greeting, a *Needs confirmation* banner while any question is open, at most three action cards (one in low-energy mode), a collapsed *Later* section (PRN medicines, pending exercises, next milestone, current restrictions), glance tiles, *Quick log*, *I feel overwhelmed*, recently done, *If something feels wrong*.
+- **Quick Log** bottom sheet: Medication, Exercise, Ice/elevate, Pain/check-in, Note. Defaults are shown but nothing is stored until the final *Record* button; closing the sheet creates no event.
+  - Medication: pill count, mg total, actual time, optional pain score, optional care-partner attribution; shows the rolling 24 h acetaminophen total and an unmistakable warning (with explicit acknowledgement) above 3,000 mg; gentle possible-duplicate warning within 60 min; aspirin–ibuprofen interaction notice; ibuprofen's own label maximum.
+  - Exercise: cleared vs not-cleared is explicit; stopping early or *Not today* carries no penalty; max bend > 90° is refused until cleared.
+  - Ice/elevate: requires confirming the dry barrier; handout guidance shown.
+  - Check-in: pain 0–10, swelling, high-priority symptom flags → explicit care-seeking instruction, never a score.
+- **Medications**: order cards with prescription wording, status (*Schedule needs confirmation*, *As needed · available to log if taken*, *Prescriber confirmation required*, *Confirmed*), last confirmed dose or *Not recorded*, safeguards, *Confirm schedule* (creates a new order **version** with who/when/source; the old version is kept and historical events keep their version), full history with *Correct* (reason required; originals preserved), honest reminder policy and OS-reminder suggestions.
+- **Movement**: Cleared / Pending clinician confirmation / Completed. *Mark as cleared* requires who, when and instructions version. Uncleared exercises are never presented as due.
+- **Progress**: chartless last-7-days table (*Not recorded* for empty days), recent check-ins, symptom flags, *Prepare follow-up summary*.
+- **Plan**: surgery details, the five open questions with *Record the answer* (requires who/when/source), patient questions for the visit, current restrictions, milestones (informational until confirmed), appointments, care-team contacts, original prescription wording, source documents, journal.
+- **Settings & backup**: text size, light/dark (low-stimulation) theme, reduced motion, low-energy mode, care partner (with patient consent), storage status + persistent-storage request, **Export JSON**, **Export visit summary (Markdown)**, **Import backup** (validated, diffed, confirmed, written in one transaction, conflicts never overwrite), sample entries (clearly labelled, no doses), **Erase local data** (double confirmation).
+- Data-loss notice: if this browser had entries before and the store is now empty, Today says so and offers *Import backup* instead of presenting an empty history as complete.
+- PWA: `manifest.webmanifest`, `sw.js` (app shell cached; navigations network-first), icons, iOS meta tags, safe-area padding.
+- Accessibility: semantic landmarks, 48 px tap targets, visible focus, dialog focus trap + Escape, `aria-live` toasts, text-size control, `prefers-reduced-motion` honoured, no inline scripts/styles (strict CSP).
+
+## Implementation choices (unresolved in the spec; sensible defaults chosen)
+
+| Choice | Default |
+|---|---|
+| Day count | Surgery day = **Day 0** (clinical POD convention); Nov 7 = Day 1 |
+| Open questions | The four discrepancies in the spec plus *first clinic visit timing* (5 total) |
+| Settings route | `#more` rather than `#settings` (some embedding viewers reserve that hash) |
+| Order versions | Stored as `id@v<n>` keys; the highest version per id is current; previous versions keep `valid_to` |
+| Corrections | A correction event references the prior event (`corrects`); a *void* is a tombstone correction; the current view is derived |
+| Pulled forward from Phase 2 as safety guardrails | Rolling acetaminophen warning, duplicate warning, interaction notice in the Quick Log medication sheet. Dose-entry UX, in-app scheduled reminders and actual-vs-planned timestamps remain Phase 2. |
+| Exports in embedded viewers | Export sheets offer **Copy** as well as **Download**, because some viewers block downloads |
+| Sample data | Loaded only on request from Settings, tagged `created_by: "sample"`, contains no medication doses |
+
+## Repository layout
+
+```
+index.html  styles.css  manifest.webmanifest  sw.js  package.json
+icons/            PNG icons (generated, abstract mark)
+js/               app.js db.js events.js medications.js exercises.js safety-rules.js
+                  reminders.js export-import.js time.js ui.js prefs.js seed.js sample-data.js
+js/views/         today medications movement progress plan more onboarding quick-log shared
+docs/             SPEC.md  AGENTS.md  care-plan-template.md
+schemas/          recovery-export.schema.json
+tests/            event-log meds safety export-import time (node:test)
+.github/workflows/pages.yml
+```
+
+## Known limitations (Phase 1)
+
+- No in-app scheduled reminders yet (Phase 2). The app never claims to ring while closed.
+- No timer in exercise sessions (Phase 3); sessions are recorded after the fact.
+- No encryption of exports (Phase 5); keep backups private.
+- No cross-device sync by design; move data with export/import.
+- Browser storage can still be evicted. The JSON export is the real backup.

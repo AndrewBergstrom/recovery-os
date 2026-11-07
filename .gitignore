@@ -1,0 +1,9 @@
+# Never commit real data
+*.backup.json
+recovery-os-backup-*.json
+recovery-os-visit-summary-*.md
+exports/
+# OS / editor
+.DS_Store
+Thumbs.db
+node_modules/

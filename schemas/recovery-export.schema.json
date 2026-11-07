@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/recovery-os/recovery-export.schema.json",
+  "title": "Recovery OS export",
+  "description": "Canonical JSON exchange format. events contains only entries the patient explicitly confirmed; absence of an entry means 'not recorded'. The in-app validator (js/export-import.js) enforces the required subset of this schema; it is not a full JSON Schema engine.",
+  "type": "object",
+  "required": ["schema_version", "exported_at", "timezone", "profile", "care_orders", "events", "unresolved_questions"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^1\\.\\d+\\.\\d+$" },
+    "app_version": { "type": "string" },
+    "exported_at": { "type": "string", "format": "date-time" },
+    "timezone": { "type": "string", "minLength": 1 },
+    "profile": {
+      "type": "object",
+      "required": ["surgery_date", "surgical_side"],
+      "properties": {
+        "surgery_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "surgical_side": { "type": "string", "enum": ["left", "right", "both"] },
+        "joint": { "type": "string" },
+        "procedures": { "type": "array", "items": { "type": "string" } },
+        "timezone": { "type": "string" },
+        "source": { "type": "string" }
+      }
+    },
+    "activation": {
+      "type": ["object", "null"],
+      "properties": { "activated_at": { "type": "string", "format": "date-time" }, "reviewed_seed_version": { "type": "integer" } }
+    },
+    "care_orders": {
+      "type": "array",
+      "description": "Every version of every order. The highest version per id is current. Orders are never doses.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "version", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "key": { "type": "string", "description": "id@v<version>" },
+          "type": { "type": "string", "enum": ["medication", "exercise"] },
+          "version": { "type": "integer", "minimum": 1 },
+          "status": { "type": "string" },
+          "name": { "type": "string" },
+          "directions": { "type": "string" },
+          "strength_mg": { "type": "number" },
+          "schedule": { "type": "object" },
+          "cleared": { "type": "boolean" },
+          "cleared_by": { "type": ["string", "null"] },
+          "cleared_on": { "type": ["string", "null"] },
+          "instructions_version": { "type": "string" },
+          "confirmed_by": { "type": ["string", "null"] },
+          "confirmed_on": { "type": ["string", "null"] },
+          "valid_from": { "type": ["string", "null"] },
+          "valid_to": { "type": ["string", "null"] },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "event_type", "occurred_at", "recorded_at", "timezone", "created_by", "source", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "event_type": { "type": "string", "enum": ["medication", "exercise", "ice_elevate", "checkin", "note"] },
+          "occurred_at": { "type": "string", "format": "date-time", "description": "UTC instant" },
+          "occurred_local": { "type": "string", "description": "Wall-clock time in `timezone`, YYYY-MM-DDTHH:mm" },
+          "recorded_at": { "type": "string", "format": "date-time" },
+          "timezone": { "type": "string" },
+          "created_by": { "type": "string", "description": "'patient', a care partner's name, 'sample' or 'import'" },
+          "source": { "type": "string" },
+          "order_version": { "type": ["integer", "null"] },
+          "status": { "type": "string" },
+          "notes": { "type": "string" },
+          "corrects": { "type": ["string", "null"], "description": "id of the event this one corrects; the original is preserved" },
+          "correction_reason": { "type": ["string", "null"] },
+          "medication_id": { "type": "string" },
+          "strength_mg": { "type": "number" },
+          "quantity": { "type": "number" },
+          "total_mg": { "type": "number" },
+          "pain": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "exercise_id": { "type": "string" },
+          "sets": { "type": "integer" },
+          "reps": { "type": "integer" },
+          "duration_seconds": { "type": "integer" },
+          "symptom_response": { "type": "string", "enum": ["comfortable", "mild_discomfort", "stopped_symptoms"] },
+          "completed": { "type": "boolean" },
+          "cleared_at_time": { "type": "boolean" },
+          "kind": { "type": "string", "enum": ["ice", "elevate", "both"] },
+          "duration_minutes": { "type": "number" },
+          "barrier_confirmed": { "type": "boolean" },
+          "swelling": { "type": "string", "enum": ["less", "same", "more", "unsure"] },
+          "symptoms": { "type": "array", "items": { "type": "string" } },
+          "category": { "type": "string" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "unresolved_questions": {
+      "type": "array",
+      "description": "All clinician questions with their status; 'needs_clinician_confirmation' or 'resolved'.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "topic": { "type": "string" },
+          "ask": { "type": "string" },
+          "conflicting_values": { "type": "array", "items": { "type": "string" } },
+          "status": { "type": "string" },
+          "resolution": { "type": ["object", "null"] }
+        }
+      }
+    },
+    "milestones": { "type": "array", "items": { "type": "object", "required": ["id"] } },
+    "appointments": { "type": "array", "items": { "type": "object", "required": ["id"] } },
+    "contacts": { "type": "array", "items": { "type": "object", "required": ["id"] } },
+    "proposals": { "type": "array", "description": "Reserved for AI/agent proposals; never applied automatically." }
+  }
+}
