@@ -44,6 +44,7 @@ export function careCircleCard(ctx) {
         const btns = el('div', { class: 'btn-row' });
         if (status === 'invited' && r.invite_token) btns.append(button('Copy link', { cls: 'small', onClick: async () => toast((await copyText(inviteLink(r.invite_token))) ? 'Invite link copied' : 'Could not copy — open the invite to see the link') }), button('Show link', { cls: 'small', variant: 'ghost', onClick: () => showLinkSheet(ctx, r) }));
         if (status !== 'revoked') btns.append(button('New link', { cls: 'small', variant: 'ghost', onClick: async () => { await actions.regenerateInvite(r); fill(); } }), button('Revoke', { cls: 'small', variant: 'ghost', onClick: async () => { if (await confirmDialog({ title: `Revoke ${r.member_name}'s access?`, message: 'They lose access to your recovery immediately. Entries they already logged stay in your record.', confirmText: 'Revoke', danger: true })) { await actions.revokeMember(r); fill(); } } }));
+        if (status === 'revoked') btns.append(button('Remove', { cls: 'small', variant: 'ghost', onClick: async () => { if (await confirmDialog({ title: `Remove ${r.member_name} from the list?`, message: 'Deletes this revoked invite. Entries they logged stay in your record.', confirmText: 'Remove' })) { await actions.removeMember(r); fill(); } } }));
         row.append(btns);
         list.append(row);
       }

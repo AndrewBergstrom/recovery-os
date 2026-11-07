@@ -24,7 +24,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.4.4';
+export const APP_VERSION = '0.4.5';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -226,6 +226,10 @@ Object.assign(ctx.actions, {
   async revokeMember(row) {
     await sync.client.patch('care_circle', `id=eq.${row.id}`, { revoked_at: toIso(nowMs()), invite_token: null });
     toast(`${row.member_name}'s access revoked`);
+  },
+  async removeMember(row) {
+    await sync.client.remove('care_circle', `id=eq.${row.id}`);
+    toast('Removed');
   },
   async acceptInvite({ token, name }) {
     if (!name) throw new Error('Enter your name.');

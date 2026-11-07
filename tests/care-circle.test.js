@@ -133,3 +133,17 @@ test('stateFromRecords rebuilds the schedule inputs from cloud rows on top of th
   const rs = computeReminders({ state, now: la('2026-11-07', '10:02') });
   assert.deepEqual(rs.map((r) => r.slot_id), ['ice:ice:2026-11-07:10:00']);
 });
+
+test('reminder fan-out drops subscriptions of revoked or never-accepted members', async () => {
+  const { partitionSubscribers } = await import('../js/reminders-due.js');
+  const subs = [
+    { id: 'a', subscriber_id: 'owner', endpoint: 'o1' },
+    { id: 'b', subscriber_id: 'lindsay', endpoint: 'l1' },
+    { id: 'c', subscriber_id: 'revoked-partner', endpoint: 'r1' },
+    { id: 'd', subscriber_id: 'stranger', endpoint: 's1' },
+  ];
+  const { keep, drop } = partitionSubscribers(subs, 'owner', ['lindsay']);
+  assert.deepEqual(keep.map((s) => s.id), ['a', 'b']);
+  assert.deepEqual(drop.map((s) => s.id), ['c', 'd']);
+  assert.deepEqual(partitionSubscribers([], 'owner', []), { keep: [], drop: [] });
+});

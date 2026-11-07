@@ -105,4 +105,21 @@ export function stateFromRecords(rows, seedItems = []) {
   return state;
 }
 
+/**
+ * Which push subscriptions for an owner may still receive reminders: the owner's
+ * own devices and devices of members whose membership is accepted and not revoked.
+ * Everything else is dropped (a revoked partner must stop receiving the patient's
+ * medication reminders even if their device never unsubscribed).
+ */
+export function partitionSubscribers(subs, ownerId, activeMemberIds) {
+  const active = new Set(activeMemberIds || []);
+  const keep = [];
+  const drop = [];
+  for (const s of subs || []) {
+    if (s.subscriber_id === ownerId || active.has(s.subscriber_id)) keep.push(s);
+    else drop.push(s);
+  }
+  return { keep, drop };
+}
+
 export { zonedToUtc };

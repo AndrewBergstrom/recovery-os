@@ -9,7 +9,7 @@
 // Secrets: CRON_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (JWK "d", base64url), VAPID_SUBJECT.
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
-import { computeReminders, filterForSubscriber, stateFromRecords } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@main/js/reminders-due.js";
+import { computeReminders, filterForSubscriber, partitionSubscribers, stateFromRecords } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@main/js/reminders-due.js";
 import { seedItems } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@main/js/seed.js";
 import { sendWebPush, type VapidKeys } from "./webpush.ts";
 
@@ -76,8 +76,15 @@ export async function handler(req: Request): Promise<Response> {
   const byOwner = new Map<string, Sub[]>();
   for (const s of subs) byOwner.set(s.owner_id, [...(byOwner.get(s.owner_id) || []), s]);
   const report: unknown[] = [];
-  for (const [ownerId, ownerSubs] of byOwner) {
+  for (const [ownerId, subsForOwner] of byOwner) {
     try {
+      // A care partner keeps receiving reminders only while their membership is active:
+      // subscriptions of revoked/removed members are dropped here (the member's device
+      // cannot be trusted to unsubscribe itself).
+      const members: { member_id: string }[] = await rest(`/rest/v1/care_circle?owner_id=eq.${ownerId}&revoked_at=is.null&accepted_at=not.is.null&member_id=not.is.null&select=member_id`);
+      const { keep: ownerSubs, drop } = partitionSubscribers(subsForOwner, ownerId, members.map((m) => m.member_id)) as { keep: Sub[]; drop: Sub[] };
+      for (const s of drop) await rest(`/rest/v1/push_subscriptions?id=eq.${s.id}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      if (!ownerSubs.length) continue;
       const rows = await rest(`/rest/v1/records?user_id=eq.${ownerId}&deleted=eq.false&store=in.(events,orders,meta,slot_states,milestones,appointments)&select=store,key,payload,deleted`);
       const state = stateFromRecords(rows, seedItems(new Date(now).toISOString()));
       if (!state.profile) continue;
