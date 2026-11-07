@@ -6,11 +6,16 @@
 // came due or went unlogged, and sends Web Push notifications (RFC 8291/8292) with
 // WebCrypto — no npm dependencies.
 //
+// The app modules are imported from jsDelivr pinned to a commit (jsDelivr caches
+// branch URLs for hours, so "@main" can lag a deploy and break an import). When
+// js/reminders-due.js, js/schedule.js, js/seed.js or js/time.js change, bump APP_COMMIT
+// and redeploy this function.
+//
 // Secrets: CRON_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (JWK "d", base64url), VAPID_SUBJECT.
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 
-import { computeReminders, filterForSubscriber, partitionSubscribers, stateFromRecords } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@main/js/reminders-due.js";
-import { seedItems } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@main/js/seed.js";
+import { computeReminders, filterForSubscriber, partitionSubscribers, stateFromRecords } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@d4fd0aaa69a4c9af1eb1e610b2e542643e3392f8/js/reminders-due.js";
+import { seedItems } from "https://cdn.jsdelivr.net/gh/AndrewBergstrom/recovery-os@d4fd0aaa69a4c9af1eb1e610b2e542643e3392f8/js/seed.js";
 import { sendWebPush, type VapidKeys } from "./webpush.ts";
 
 // deno-lint-ignore no-explicit-any
