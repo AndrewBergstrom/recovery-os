@@ -67,6 +67,7 @@ export function createEvent(input, { nowMs = Date.now(), tz = DEFAULT_TZ } = {})
     notes: typeof input.notes === 'string' ? input.notes.trim() : '',
     corrects: input.corrects || null,
     correction_reason: input.correction_reason || null,
+    slot_id: input.slot_id || null,
   };
   for (const f of TYPE_FIELDS[type] || []) {
     if (input[f] !== undefined) ev[f] = input[f];
@@ -134,6 +135,7 @@ export function createCorrection(original, changes, { reason, note, nowMs = Date
       source: 'correction',
       created_by,
       order_version: original.order_version ?? null,
+      slot_id: original.slot_id || null,
       notes: note != null ? note : original.notes,
       corrects: original.id,
       correction_reason: reason,

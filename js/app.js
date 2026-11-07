@@ -10,7 +10,7 @@ import { ordersById } from './medications.js';
 import { buildExport, validateExport, diffImport, applyImport, parseBackupText, buildVisitSummary } from './export-import.js';
 import { sampleEvents, isSample } from './sample-data.js';
 import { ESCALATION_TEXT } from './safety-rules.js';
-import { renderToday } from './views/today.js';
+import { renderCalendar, openRoutineSheet } from './views/calendar.js';
 import { renderMedications } from './views/medications.js';
 import { renderMovement } from './views/movement.js';
 import { renderProgress } from './views/progress.js';
@@ -20,14 +20,14 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 
 const ROUTES = {
-  today: { label: 'Today', icon: 'today', render: renderToday },
+  today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
   medications: { label: 'Meds', icon: 'meds', render: renderMedications },
   movement: { label: 'Movement', icon: 'move', render: renderMovement },
   progress: { label: 'Progress', icon: 'progress', render: renderProgress },
-  plan: { label: 'Plan', icon: 'plan', render: renderPlan },
+  plan: { label: 'Plan', icon: 'note', render: renderPlan },
   more: { label: 'Settings', icon: 'more', render: renderMore, hidden: true },
 };
 
@@ -41,6 +41,8 @@ const state = {
   milestones: [],
   appointments: [],
   contacts: [],
+  slotStates: [],
+  ui: {},
   storeVolatile: false,
   dataLossSuspected: false,
   swStatus: 'unsupported',
@@ -58,8 +60,8 @@ const ctx = {
 
 // ---------- Persistence helpers ----------
 async function loadState() {
-  const [events, orders, questions, milestones, appointments, contacts, metaRows] = await Promise.all(
-    ['events', 'orders', 'questions', 'milestones', 'appointments', 'contacts', 'meta'].map((s) => store.getAll(s))
+  const [events, orders, questions, milestones, appointments, contacts, metaRows, slotStates] = await Promise.all(
+    ['events', 'orders', 'questions', 'milestones', 'appointments', 'contacts', 'meta', 'slot_states'].map((s) => store.getAll(s))
   );
   const bySeedOrder = (a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999) || String(a.id).localeCompare(String(b.id)) || (a.version || 1) - (b.version || 1);
   state.events = sortByOccurred(events, 'asc');
@@ -68,6 +70,7 @@ async function loadState() {
   state.milestones = milestones;
   state.appointments = appointments;
   state.contacts = contacts;
+  state.slotStates = slotStates;
   state.meta = Object.fromEntries(metaRows.map((m) => [m.key, m]));
   state.profile = state.meta.profile || null;
 }
@@ -151,10 +154,27 @@ Object.assign(ctx.actions, {
     closeAllSheets();
     render();
   },
+  openRoutine() {
+    return openRoutineSheet(ctx);
+  },
+  quietRender() {
+    const y = window.scrollY;
+    render();
+    window.scrollTo({ top: y });
+  },
+  async setSlotState(s) {
+    await store.put('slot_states', s);
+    await refresh();
+  },
+  async clearSlotState(slotId) {
+    await store.delete('slot_states', slotId);
+    await refresh();
+  },
   async addEvent(ev, { toastText } = {}) {
     const problems = validateEvent(ev);
     if (problems.length) throw new Error(problems.join(' '));
     await store.put('events', ev);
+    if (ev.slot_id) await store.delete('slot_states', ev.slot_id); // a recorded entry ends any in-progress/skipped state
     if (!isSample(ev)) markHadData();
     await refresh();
     if (toastText) toast(toastText);
@@ -415,9 +435,7 @@ async function boot() {
   // foreground, and every few minutes on Today. Never while a sheet is open.
   const quietRender = () => {
     if (document.querySelector('.sheet-wrap') || onboarding) return;
-    const y = window.scrollY;
-    render();
-    window.scrollTo({ top: y });
+    ctx.actions.quietRender();
   };
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') quietRender();

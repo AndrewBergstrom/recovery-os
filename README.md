@@ -24,7 +24,7 @@ Or `npx serve .` — anything that serves the folder as-is.
 node --test tests/*.test.js      # Node 20+ (uses node:test, no packages)
 ```
 
-34 tests cover: no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
+44 tests cover: calendar slots and their statuses (upcoming → due → red; PRN never a slot; uncleared exercises never a slot; loose entries attach to the nearest slot); no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
 
 ## Deploy (GitHub Pages)
 
@@ -38,11 +38,21 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: bl
 
 **Data placement.** The repo contains the care-plan *orders* transcribed from the paperwork (medication directions, exercise descriptions, open questions) and no identifiers — no name, date of birth, address, MRN or contact details. Real entries (doses, sessions, check-ins, contacts, appointments) live only in the browser's IndexedDB and in backups the patient exports. Never commit an exported backup.
 
+## The calendar (main screen)
+
+- **Day strip** (phones) with a completion ring per day; **7-day grid** on wide screens.
+- **Pills**, one per planned item, placed on an hour-by-hour timeline: scheduled medications (confirmed times, or dashed placeholder times until the schedule is confirmed), ice + elevate sessions, cleared exercises, the optional check-in, milestones and appointments.
+- Tap a pill → answer its questions → it changes colour: **green** done · **yellow** in progress (after *Start now*) · **red** not recorded once its time plus a grace window has passed · indigo = due now · grey = upcoming / optional / skipped. Translucent fill, bold border.
+- Entries recorded from a pill carry its `slot_id`; entries logged loosely attach to the nearest unfilled slot of the same kind that day.
+- **As-needed** medicines sit in their own row: tap to log, shows today's count and last time. Never due, never red.
+- Times come from the **Daily routine** in Settings (ice 4×/day, check-in, exercise sessions, aspirin placeholders). They place pills only; they never change an order.
+- *I feel overwhelmed* collapses the screen to the single next pill.
+
 ## What Phase 1 includes
 
-- Mobile-first shell with bottom navigation (side navigation ≥ 880 px): **Today · Meds · Movement · Progress · Plan**, plus Settings & backup behind the gear.
+- Mobile-first shell with bottom navigation (side navigation ≥ 880 px): **Calendar · Meds · Movement · Progress · Plan**, plus Settings & backup behind the gear.
 - Onboarding that reviews the care-plan seed (orders, open questions, exercises, restrictions, milestones) before activation. Activation records that the orders were reviewed — never that anything was taken.
-- **Today**: day count, calm greeting, a *Needs confirmation* banner while any question is open, at most three action cards (one in low-energy mode), a collapsed *Later* section (PRN medicines, pending exercises, next milestone, current restrictions), glance tiles, *Quick log*, *I feel overwhelmed*, recently done, *If something feels wrong*.
+- **Calendar**: see above. Plus the *to confirm with clinicians* banner, *Quick log*, *I feel overwhelmed*, current restrictions and *If something feels wrong*.
 - **Quick Log** bottom sheet: Medication, Exercise, Ice/elevate, Pain/check-in, Note. Defaults are shown but nothing is stored until the final *Record* button; closing the sheet creates no event.
   - Medication: pill count, mg total, actual time, optional pain score, optional care-partner attribution; shows the rolling 24 h acetaminophen total and an unmistakable warning (with explicit acknowledgement) above 3,000 mg; gentle possible-duplicate warning within 60 min; aspirin–ibuprofen interaction notice; ibuprofen's own label maximum.
   - Exercise: cleared vs not-cleared is explicit; stopping early or *Not today* carries no penalty; max bend > 90° is refused until cleared.
@@ -66,6 +76,8 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: bl
 | Settings route | `#more` rather than `#settings` (some embedding viewers reserve that hash) |
 | Order versions | Stored as `id@v<n>` keys; the highest version per id is current; previous versions keep `valid_to` |
 | Corrections | A correction event references the prior event (`corrects`); a *void* is a tombstone correction; the current view is derived |
+| Pill grace windows (minutes after slot time before red) | medication 60 · ice 90 · exercise 120 · check-in never red (optional) |
+| Routine defaults | ice 09:00/13:00/17:00/21:00 · check-in 20:00 · exercises 09:30/14:30/19:30 · aspirin placeholders 08:00/18:00 |
 | Pulled forward from Phase 2 as safety guardrails | Rolling acetaminophen warning, duplicate warning, interaction notice in the Quick Log medication sheet. Dose-entry UX, in-app scheduled reminders and actual-vs-planned timestamps remain Phase 2. |
 | Exports in embedded viewers | Export sheets offer **Copy** as well as **Download**, because some viewers block downloads |
 | Sample data | Loaded only on request from Settings, tagged `created_by: "sample"`, contains no medication doses |
@@ -75,12 +87,12 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: bl
 ```
 index.html  styles.css  manifest.webmanifest  sw.js  package.json
 icons/            PNG icons (generated, abstract mark)
-js/               app.js db.js events.js medications.js exercises.js safety-rules.js
+js/               app.js db.js events.js schedule.js medications.js exercises.js safety-rules.js
                   reminders.js export-import.js time.js ui.js prefs.js seed.js sample-data.js
-js/views/         today medications movement progress plan more onboarding quick-log shared
+js/views/         calendar medications movement progress plan more onboarding quick-log shared
 docs/             SPEC.md  AGENTS.md  care-plan-template.md
 schemas/          recovery-export.schema.json
-tests/            event-log meds safety export-import time (node:test)
+tests/            event-log meds safety schedule export-import time (node:test)
 .github/workflows/pages.yml
 ```
 

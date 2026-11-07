@@ -10,3 +10,4 @@ Quick checks before any PR:
 - Never seed or commit doses taken, sessions completed, symptoms, names or contact details.
 - Keep unresolved discrepancies visible as `needs_clinician_confirmation` until the patient records a clinician's answer with who/when/source.
 - Bump `CACHE_VERSION` in `sw.js` and update its `ASSETS` list whenever files change.
+- The calendar's pill statuses are derived in `js/schedule.js` from recorded events + `slot_states`; a pill can only turn green because an entry exists. Keep it that way.

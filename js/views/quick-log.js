@@ -210,6 +210,7 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
             notes: note.value,
             created_by: by.get(),
             source: init.source || 'quick_log',
+            slot_id: init.slot_id,
           },
           { nowMs: ctx.now(), tz }
         );
@@ -253,13 +254,13 @@ function exerciseForm(ctx, init, { onRecord, onBack }) {
   const guard = el('div', { class: 'banner banner-info hidden' });
   const sets = el('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: 'e.g. 2' });
   const reps = el('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: 'e.g. 10' });
-  const minutes = el('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: 'minutes' });
+  const minutes = el('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: 'minutes', value: init.duration_minutes ? String(init.duration_minutes) : '' });
   const hold = el('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: 'seconds' });
   const bend = el('input', { type: 'number', min: '0', max: '90', step: '1', inputmode: 'numeric', placeholder: 'degrees, if measured' });
   const brace = el('input', { type: 'checkbox', checked: true });
   const fieldsWrap = el('div', { class: 'form' });
   const comfort = segmented(SYMPTOM_RESPONSES, null, null, { label: 'How did it feel?' });
-  const outcome = segmented(SESSION_OUTCOMES, 'completed', null, { label: 'Outcome' });
+  const outcome = segmented(SESSION_OUTCOMES, init.stopped_early ? 'stopped_early' : 'completed', null, { label: 'Outcome' });
   const time = timePicker(ctx, init.occurred_ms || ctx.now(), { label: 'When' });
   const note = el('textarea', { placeholder: 'Optional note' });
   const by = enteredBy(ctx);
@@ -316,6 +317,7 @@ function exerciseForm(ctx, init, { onRecord, onBack }) {
             notes: note.value,
             created_by: by.get(),
             source: init.source || 'quick_log',
+            slot_id: init.slot_id,
           },
           { nowMs: ctx.now(), tz }
         );
@@ -344,8 +346,9 @@ function iceForm(ctx, init, { onRecord, onBack }) {
   const tz = ctx.state.profile.timezone || DEFAULT_TZ;
   const errs = errorsBox();
   const kind = segmented([{ id: 'ice', label: 'Ice' }, { id: 'elevate', label: 'Elevate' }, { id: 'both', label: 'Both' }], init.kind || 'ice', () => renderBarrier(), { label: 'What' });
-  const duration = segmented([{ id: '20', label: '20 min' }, { id: '25', label: '25 min' }, { id: '30', label: '30 min' }, { id: 'other', label: 'Other' }], '20', (v) => other.classList.toggle('hidden', v !== 'other'), { label: 'Duration' });
-  const other = el('input', { type: 'number', min: '1', max: '180', step: '1', inputmode: 'numeric', placeholder: 'minutes', class: 'hidden' });
+  const preset = init.duration_minutes ? ([20, 25, 30].includes(init.duration_minutes) ? String(init.duration_minutes) : 'other') : '20';
+  const duration = segmented([{ id: '20', label: '20 min' }, { id: '25', label: '25 min' }, { id: '30', label: '30 min' }, { id: 'other', label: 'Other' }], preset, (v) => other.classList.toggle('hidden', v !== 'other'), { label: 'Duration' });
+  const other = el('input', { type: 'number', min: '1', max: '180', step: '1', inputmode: 'numeric', placeholder: 'minutes', class: preset === 'other' ? '' : 'hidden', value: preset === 'other' ? String(init.duration_minutes) : '' });
   const barrier = el('input', { type: 'checkbox' });
   const barrierRow = el('label', { class: 'check' }, barrier, el('span', { text: 'Dry barrier between the entire cold pad and skin' }));
   const time = timePicker(ctx, init.occurred_ms || ctx.now(), { label: 'Started at' });
@@ -365,7 +368,7 @@ function iceForm(ctx, init, { onRecord, onBack }) {
         if (!(mins > 0)) throw new Error('Enter the duration in minutes.');
         if (kind.value !== 'elevate' && !barrier.checked) throw new Error('Confirm the dry barrier between the cold pad and skin (per the handout), or choose Elevate only.');
         const ev = createEvent(
-          { event_type: 'ice_elevate', status: 'completed', kind: kind.value, duration_minutes: mins, barrier_confirmed: kind.value === 'elevate' ? undefined : barrier.checked, occurred_ms: ms, notes: note.value, created_by: by.get(), source: init.source || 'quick_log' },
+          { event_type: 'ice_elevate', status: 'completed', kind: kind.value, duration_minutes: mins, barrier_confirmed: kind.value === 'elevate' ? undefined : barrier.checked, occurred_ms: ms, notes: note.value, created_by: by.get(), source: init.source || 'quick_log', slot_id: init.slot_id },
           { nowMs: ctx.now(), tz }
         );
         const problems = validateEvent(ev);
@@ -417,7 +420,7 @@ function checkinForm(ctx, init, { onRecord, onBack }) {
         const symptoms = symptomBoxes.filter((b) => b.input.checked).map((b) => b.s.id);
         if (pain.value == null && !swelling.value && !symptoms.length && !note.value.trim()) throw new Error('Record at least one thing — pain, swelling, a symptom flag or a note.');
         const ev = createEvent(
-          { event_type: 'checkin', status: 'recorded', pain: pain.value == null ? undefined : Number(pain.value), swelling: swelling.value || undefined, symptoms, occurred_ms: ms, notes: note.value, created_by: by.get(), source: init.source || 'quick_log' },
+          { event_type: 'checkin', status: 'recorded', pain: pain.value == null ? undefined : Number(pain.value), swelling: swelling.value || undefined, symptoms, occurred_ms: ms, notes: note.value, created_by: by.get(), source: init.source || 'quick_log', slot_id: init.slot_id },
           { nowMs: ctx.now(), tz }
         );
         const problems = validateEvent(ev);

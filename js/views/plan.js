@@ -7,27 +7,10 @@ import { currentEvents, sortByOccurred, newId } from '../events.js';
 import { restrictions as seedRestrictions, sourceDocuments } from '../seed.js';
 import { activeOrders } from '../medications.js';
 import { weightBearingState } from '../safety-rules.js';
+import { milestoneDate } from '../schedule.js';
 import { statusChipFor, eventList, kv } from './shared.js';
 
-/** Resolve a milestone's date window from the surgery date. */
-export function milestoneDate(m, surgeryDate) {
-  const w = m.when || {};
-  if (m.confirmed_date) return { from: m.confirmed_date, to: m.confirmed_date, label: formatDateStr(m.confirmed_date) };
-  if (w.kind === 'offset_hours') {
-    const d = addDays(surgeryDate, Math.floor(w.hours / 24));
-    return { from: d, to: d, label: `~${formatDateStr(d)} (${w.hours} h after surgery)` };
-  }
-  if (w.kind === 'offset_days') {
-    const d = addDays(surgeryDate, w.days);
-    return { from: d, to: d, label: `~${formatDateStr(d)}` };
-  }
-  if (w.kind === 'range_days') {
-    const a = addDays(surgeryDate, w.from);
-    const b = addDays(surgeryDate, w.to);
-    return { from: a, to: b, label: `${formatDateStr(a)} – ${formatDateStr(b)}` };
-  }
-  return null;
-}
+export { milestoneDate };
 
 export function renderPlan(ctx) {
   const { state, actions } = ctx;

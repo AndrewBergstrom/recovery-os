@@ -2,7 +2,7 @@
    Only static assets are cached. No data ever passes through here.
    Bump CACHE_VERSION whenever any file in ASSETS changes. */
 
-const CACHE_VERSION = 'recovery-os-v0.1.0';
+const CACHE_VERSION = 'recovery-os-v0.2.0';
 const ASSETS = [
   './',
   './index.html',
@@ -22,9 +22,11 @@ const ASSETS = [
   './js/reminders.js',
   './js/safety-rules.js',
   './js/sample-data.js',
+  './js/schedule.js',
   './js/seed.js',
   './js/time.js',
   './js/ui.js',
+  './js/views/calendar.js',
   './js/views/medications.js',
   './js/views/more.js',
   './js/views/movement.js',
@@ -33,7 +35,6 @@ const ASSETS = [
   './js/views/progress.js',
   './js/views/quick-log.js',
   './js/views/shared.js',
-  './js/views/today.js',
 ];
 
 self.addEventListener('install', (event) => {

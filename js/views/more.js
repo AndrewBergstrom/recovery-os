@@ -39,7 +39,7 @@ export function renderMore(ctx) {
         ['Time zone', state.profile.timezone || DEFAULT_TZ],
         ['Care partner', partner || 'None set'],
       ]),
-      el('div', { class: 'card-actions' }, button('Edit surgery details', { onClick: () => actions.openProfileEditor() }), button(partner ? 'Change care partner' : 'Add care partner', { onClick: () => openCarePartnerSheet(ctx) })),
+      el('div', { class: 'card-actions' }, button('Edit surgery details', { onClick: () => actions.openProfileEditor() }), button(partner ? 'Change care partner' : 'Add care partner', { onClick: () => openCarePartnerSheet(ctx) }), button('Daily routine (calendar times)', { onClick: () => actions.openRoutine() })),
       el('p', { class: 'muted small', text: 'A care partner can record an action for you when the phone is hard to use. Every entry keeps who entered it.' })
     )
   );

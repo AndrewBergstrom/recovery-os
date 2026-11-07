@@ -16,6 +16,7 @@ const COLLECTIONS = [
   { store: 'milestones', field: 'milestones' },
   { store: 'appointments', field: 'appointments' },
   { store: 'contacts', field: 'contacts' },
+  { store: 'slot_states', field: 'slot_states' },
 ];
 
 export function orderKeyOf(o) {
@@ -40,6 +41,7 @@ export function buildExport(state, { nowIso = new Date().toISOString(), appVersi
     milestones: [...(state.milestones || [])],
     appointments: [...(state.appointments || [])],
     contacts: [...(state.contacts || [])],
+    slot_states: [...(state.slotStates || [])],
     proposals: [],
     note: 'events contains only entries the patient explicitly confirmed. No entry means "not recorded", never "not taken".',
   };
@@ -99,6 +101,7 @@ export function validateExport(obj) {
         if (typeof item.status !== 'string') err(`care_orders[${i}] is missing status.`);
       }
       if (c.store === 'questions' && typeof item.status !== 'string') err(`unresolved_questions[${i}] is missing status.`);
+      if (c.store === 'slot_states' && !['in_progress', 'skipped'].includes(item.status)) err(`slot_states[${i}] has invalid status "${item.status}".`);
     });
   }
   return { ok: errors.length === 0, errors };
@@ -124,7 +127,8 @@ export function deepEqual(a, b) {
 export function diffImport(state, incoming) {
   const sections = {};
   for (const c of COLLECTIONS) {
-    const existing = new Map((state[c.store] || []).map((o) => [keyFor(c.store, o), o]));
+    const existingList = c.store === 'slot_states' ? state.slotStates || [] : state[c.store] || [];
+    const existing = new Map(existingList.map((o) => [keyFor(c.store, o), o]));
     const section = { field: c.field, store: c.store, new: [], identical: 0, conflicts: [] };
     for (const item of incoming[c.field] || []) {
       const obj = c.store === 'orders' ? { ...item, key: orderKeyOf(item) } : item;
