@@ -60,6 +60,7 @@ Run [`02_care_circle_and_reminders.sql`](02_care_circle_and_reminders.sql) after
 - The owner invites a care partner from **Settings → Care partners → Invite a care partner** and texts them the link (`…/#invite=<token>`). Opening it on the partner's phone signs them in (anonymous auth bound to that device) and connects them to the owner's circle — no email, no password. Links are single-use; the owner can revoke access or issue a new link at any time.
 - A care partner sees the owner's calendar, medications, movement and plan, can log entries (each entry records `created_by` = their name), and can turn on reminders for themselves. They cannot see other people's data: row-level security checks `care_circle` membership on every row.
 - If a partner clears their browser data, the owner sends a new link.
+- **Revoke** ends access immediately (entries they logged stay in the record); a revoked row can then be **Removed** from the list. The reminder function deletes push subscriptions of anyone who is no longer an accepted, unrevoked member, so a revoked partner stops receiving the owner's reminders even if their device never unsubscribed.
 
 ## Push reminders
 
@@ -67,5 +68,6 @@ Run [`02_care_circle_and_reminders.sql`](02_care_circle_and_reminders.sql) after
 2. Add the function secrets: `VAPID_PUBLIC_KEY` (same value as `js/config.js`), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:you@example.com`), `CRON_SECRET` (any long random string).
 3. Schedule it: run the commented cron block at the end of `02_care_circle_and_reminders.sql` with your `CRON_SECRET`.
 4. On each device: **Settings → Reminders on this device → Turn reminders on** (on iPhone the app must be on the Home Screen). "Send a test" confirms delivery.
+5. To update the function later: Edge Functions → reminders → **Code**, replace the file contents, **Deploy updates**. Check it with the SQL editor: `select id, status_code, content, created from net._http_response order by id desc limit 5;` — each cron run should show `200` and `{"ok":true,…}`.
 
 The function imports the same schedule code the calendar uses (`js/reminders-due.js` via jsDelivr, pinned to a commit SHA in `index.ts` — jsDelivr caches branch URLs for hours, so `@main` can lag a deploy; bump the SHA and redeploy whenever `js/reminders-due.js`, `js/schedule.js`, `js/seed.js` or `js/time.js` change), so what it sends matches what the pills show: a "Time for …" push within five minutes of a required pill coming due, and — for care partners only — a "Not logged yet" nudge once the pill's grace window has passed. As-needed medicines and the optional check-in never trigger reminders. Each reminder is sent once (`reminder_log`).
