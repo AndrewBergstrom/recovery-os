@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activeOrders, isPrn, isScheduleConfirmed, lastConfirmedDose, nextScheduledDose, recentScheduledWithoutDose, dueState, confirmSchedule, statusLabel, versionsOf } from '../js/medications.js';
+import { activeOrders, isPrn, isScheduleConfirmed, lastConfirmedDose, nextScheduledDose, recentScheduledWithoutDose, dueState, confirmSchedule, statusLabel, versionsOf, predictNextDose, intervalHoursFor } from '../js/medications.js';
 import { orders } from '../js/seed.js';
 import { la, dose, TZ } from './helpers.js';
 import { formatTime } from '../js/time.js';
@@ -73,4 +73,21 @@ test('last confirmed dose ignores voided and superseded entries', () => {
   const d2 = dose('med-aspirin-81', 81, 1, la('2026-11-07', '18:00'));
   const voidD2 = { ...dose('med-aspirin-81', 81, 1, la('2026-11-07', '18:00')), status: 'voided', corrects: d2.id, correction_reason: 'not_taken' };
   assert.equal(lastConfirmedDose([d1, d2, voidD2], 'med-aspirin-81').id, d1.id);
+});
+
+test('predictNextDose anchors on the last recorded dose and respects confirmed schedules', () => {
+  const oxy = orders.find((o) => o.id === 'med-oxycodone-5');
+  assert.equal(predictNextDose(oxy, [], la('2026-11-07', '09:00'), TZ), null, 'no dose yet → no prediction');
+  const taken = dose('med-oxycodone-5', 5, 1, la('2026-11-07', '04:55'));
+  const p = predictNextDose(oxy, [taken], la('2026-11-07', '06:00'), TZ);
+  assert.equal(formatTime(p.at, TZ), '8:55 AM');
+  assert.equal(p.hours, 4);
+  assert.equal(p.available, false);
+  assert.equal(predictNextDose(oxy, [taken], la('2026-11-07', '09:00'), TZ).available, true);
+  assert.equal(intervalHoursFor(aspirin()), 12, 'twice daily → 12 h while unconfirmed');
+  const { newVersion } = confirmSchedule(aspirin(), { times: ['08:00', '18:00'], course_start: '2026-11-06', confirmed_by: 'Patient', confirmed_on: '2026-11-06', todayStr: '2026-11-06' });
+  assert.equal(intervalHoursFor(newVersion), null, 'confirmed times win over interval guesses');
+  const sched = predictNextDose(newVersion, [dose('med-aspirin-81', 81, 1, la('2026-11-07', '11:00'))], la('2026-11-07', '12:00'), TZ);
+  assert.equal(sched.kind, 'scheduled');
+  assert.equal(formatTime(sched.at, TZ), '6:00 PM');
 });

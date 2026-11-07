@@ -408,6 +408,7 @@ html[data-theme="dark"] { --c-done: #7fc79c; --c-progress: #e0b65a; --c-todo: #e
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8rem; color: var(--muted); }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-dot { width: 14px; height: 14px; border-radius: 999px; border: 2px solid var(--pill); background: var(--pill-fill); --pill: var(--c-neutral); --pill-fill: var(--c-neutral-fill); }
+.legend-dot.pill-window { border-style: dashed; }
 
 /* Pills */
 .pill {
@@ -429,7 +430,10 @@ html[data-theme="dark"] { --c-done: #7fc79c; --c-progress: #e0b65a; --c-todo: #e
 .pill-due { --pill: var(--c-due); --pill-fill: var(--c-due-fill); border-width: 3px; box-shadow: 0 0 0 4px var(--c-due-fill); }
 .pill-upcoming, .pill-info, .pill-skipped, .pill-open, .pill-prn { --pill: var(--c-neutral); --pill-fill: var(--c-neutral-fill); }
 .pill-upcoming .pill-dot, .pill-info .pill-dot, .pill-open .pill-dot, .pill-prn .pill-dot { background: transparent; color: var(--pill); border: 2px solid var(--pill); }
-.pill-open, .pill-unconfirmed { border-style: dashed; }
+.pill-open, .pill-unconfirmed, .pill-window, .pill-available { border-style: dashed; }
+.pill-window { --pill: var(--c-neutral); --pill-fill: var(--c-neutral-fill); }
+.pill-available { --pill: var(--c-due); --pill-fill: var(--c-due-fill); }
+.pill-window .pill-dot, .pill-available .pill-dot { background: transparent; color: var(--pill); border: 2px solid var(--pill); }
 .pill-unconfirmed { border-style: dashed; } /* placeholder time: keeps its status colour, dashed edge */
 .pill-skipped .pill-title { text-decoration: line-through; }
 .pill-skipped { opacity: 0.75; }
@@ -504,6 +508,8 @@ html[data-theme="dark"] { --c-done: #7fc79c; --c-progress: #e0b65a; --c-todo: #e
 
 /* As needed */
 .cal-prn { display: flex; flex-direction: column; gap: 8px; }
+.cal-prn .pill { width: 100%; }
+.cal-prn .pill-title { white-space: normal; }
 .cal-prn .section-head { flex-wrap: wrap; }
 .ring-placeholder { width: 18px; height: 18px; margin-top: 2px; }
 .cal-note { display: flex; gap: 8px; align-items: flex-start; color: var(--muted); font-size: 0.9rem; }

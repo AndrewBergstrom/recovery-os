@@ -126,3 +126,39 @@ test('routine from meta falls back to defaults for missing or empty lists', () =
   assert.deepEqual(routineFrom({ routine: { ice_times: [], checkin_time: '21:00' } }).ice_times, DEFAULT_ROUTINE.ice_times);
   assert.equal(routineFrom({ routine: { checkin_time: '21:00' } }).checkin_time, '21:00');
 });
+
+test('a logged PRN dose predicts the earliest next dose for that medicine (never red)', () => {
+  const state = baseState({ events: [dose('med-oxycodone-5', 5, 1, la(D, '04:55')), dose('med-acetaminophen-500', 500, 2, la(D, '04:55'))] });
+  const slots = buildDaySlots(state, D, { tz: TZ, now: la(D, '06:00') });
+  const oxyNext = slots.find((s) => s.kind === 'prn_next' && s.ref_id === 'med-oxycodone-5');
+  const tylNext = slots.find((s) => s.kind === 'prn_next' && s.ref_id === 'med-acetaminophen-500');
+  assert.equal(oxyNext.time, '08:55', '4 h label interval');
+  assert.equal(tylNext.time, '12:55', '8 h label interval');
+  const before = deriveStatuses(slots, { events: state.events, now: la(D, '07:00'), tz: TZ });
+  assert.equal(before.find((s) => s.id === oxyNext.id).status, 'window');
+  const after = deriveStatuses(slots, { events: state.events, now: la(D, '23:00'), tz: TZ });
+  assert.equal(after.find((s) => s.id === oxyNext.id).status, 'available', 'as-needed predictions never become red');
+  // a newer dose moves the prediction
+  const state2 = baseState({ events: [...state.events, dose('med-oxycodone-5', 5, 1, la(D, '09:30'))] });
+  const next2 = buildDaySlots(state2, D, { tz: TZ, now: la(D, '10:00') }).filter((s) => s.kind === 'prn_next' && s.ref_id === 'med-oxycodone-5');
+  assert.deepEqual(next2.map((s) => s.time), ['13:30']);
+  // MiraLAX 24 h → lands on the next day
+  const state3 = baseState({ events: [dose('med-peg-3350', 17000, 1, la(D, '08:00'))] });
+  assert.equal(buildDaySlots(state3, D, { tz: TZ }).filter((s) => s.ref_id === 'med-peg-3350').length, 0);
+  assert.equal(buildDaySlots(state3, '2026-11-08', { tz: TZ }).find((s) => s.ref_id === 'med-peg-3350').time, '08:00');
+});
+
+test('an unconfirmed aspirin placeholder slides to ~12 h after the dose actually taken', () => {
+  const state = baseState({ events: [dose('med-aspirin-81', 81, 1, la(D, '11:00'))] });
+  const out = deriveStatuses(buildDaySlots(state, D, { tz: TZ }), { events: state.events, now: la(D, '12:00'), tz: TZ });
+  const am = out.find((s) => s.ref_id === 'med-aspirin-81' && s.id.endsWith(':08:00'));
+  const pm = out.find((s) => s.ref_id === 'med-aspirin-81' && s.id.endsWith(':18:00'));
+  assert.equal(am.status, 'done', '11:00 dose matched the morning placeholder');
+  assert.equal(pm.time, '23:00', 'evening placeholder moved to 12 h after the 11:00 dose');
+  assert.equal(pm.shifted_from, '18:00');
+  assert.equal(pm.status, 'upcoming');
+  // an early dose does not move the evening placeholder (13 h gap is fine)
+  const early = baseState({ events: [dose('med-aspirin-81', 81, 1, la(D, '04:55'))] });
+  const out2 = deriveStatuses(buildDaySlots(early, D, { tz: TZ }), { events: early.events, now: la(D, '06:00'), tz: TZ });
+  assert.equal(out2.find((s) => s.id.endsWith(':18:00')).time, '18:00');
+});

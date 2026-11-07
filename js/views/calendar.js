@@ -25,7 +25,7 @@ function slotsFor(ctx, dateStr) {
   const { state } = ctx;
   const tz = state.profile.timezone || DEFAULT_TZ;
   const routine = routineFrom(state.meta);
-  return deriveStatuses(buildDaySlots(state, dateStr, { tz, routine }), { events: state.events, slotStates: state.slotStates || [], now: ctx.now(), tz });
+  return deriveStatuses(buildDaySlots(state, dateStr, { tz, routine, now: ctx.now() }), { events: state.events, slotStates: state.slotStates || [], now: ctx.now(), tz });
 }
 
 export function renderCalendar(ctx) {
@@ -108,7 +108,7 @@ export function renderCalendar(ctx) {
 
 function legend() {
   const item = (status, label) => el('span', { class: `legend-item` }, el('span', { class: `legend-dot pill-${status}` }), label);
-  return el('div', { class: 'legend', 'aria-label': 'Colour key' }, item('done', 'Done'), item('in_progress', 'In progress'), item('todo', 'Not recorded'), item('due', 'Due now'), item('upcoming', 'Upcoming'));
+  return el('div', { class: 'legend', 'aria-label': 'Colour key' }, item('done', 'Done'), item('in_progress', 'In progress'), item('todo', 'Not recorded'), item('due', 'Due now'), item('upcoming', 'Upcoming'), item('window', 'As-needed window'));
 }
 
 function dayStrip(ctx, { selected, today }) {
@@ -300,7 +300,7 @@ function weekGrid(ctx, { selected, today }) {
 function prnRow(ctx, selected) {
   const { state, actions } = ctx;
   const tz = state.profile.timezone || DEFAULT_TZ;
-  const pills = prnPills(state, selected, { tz });
+  const pills = prnPills(state, selected, { tz, now: ctx.now() });
   const row = el('div', { class: 'cal-prn' });
   row.append(el('h2', { class: 'section-title', text: 'As needed' }), el('p', { class: 'muted small', text: 'Tap to log if taken. Never due, never red.' }));
   row.append(
@@ -309,13 +309,23 @@ function prnRow(ctx, selected) {
         el('button', { type: 'button', class: `pill pill-prn${p.flagged ? ' pill-flagged' : ''}`, 'aria-label': `${p.title}, as needed, ${p.count} today`, onclick: () => openPrnSheet(ctx, p) },
           icon('meds', 'icon icon-sm'),
           el('span', { class: 'pill-title', text: cap(p.short) }),
-          el('span', { class: 'pill-meta', text: p.count ? `×${p.count} today · ${formatTime(fromIso(p.last.occurred_at), tz)}` : p.last ? `last ${describeWhen(fromIso(p.last.occurred_at), ctx.now(), tz)}` : 'not recorded' }),
+          el('span', { class: 'pill-meta', text: prnMeta(ctx, p) }),
           p.flagged ? icon('alert', 'icon icon-sm pill-flag') : null
         )
       )
     )
   );
   return row;
+}
+
+function prnMeta(ctx, p) {
+  const tz = ctx.state.profile.timezone || DEFAULT_TZ;
+  const now = ctx.now();
+  const bits = [];
+  if (p.count) bits.push(`×${p.count} today`);
+  if (p.last) bits.push(`last ${formatTime(fromIso(p.last.occurred_at), tz)}${localDateString(fromIso(p.last.occurred_at), tz) === localDateString(now, tz) ? '' : ' ' + formatDateStr(localDateString(fromIso(p.last.occurred_at), tz), { month: 'short', day: 'numeric' })}`);
+  if (p.prediction) bits.push(p.prediction.available ? `next: available now` : `next: not before ${describeWhen(p.prediction.at, now, tz)}`);
+  return bits.length ? bits.join(' · ') : 'not recorded';
 }
 
 function lowEnergyPanel(ctx, slots, today) {
@@ -366,6 +376,12 @@ export function pill(ctx, slot, { compact = false, big = false, showTime = false
     case 'open':
       meta = `Optional${slot.time ? ` · ${formatTime(slot.at, tz)}` : ''}`;
       break;
+    case 'window':
+      meta = `Not before ${formatTime(slot.at, tz)} · only if needed`;
+      break;
+    case 'available':
+      meta = `Available since ${formatTime(slot.at, tz)} · only if needed`;
+      break;
     default:
       meta = slot.at ? formatTime(slot.at, tz) : slot.sub || '';
   }
@@ -390,6 +406,10 @@ export function openSlotSheet(ctx, slot) {
   const { state, actions } = ctx;
   const tz = state.profile.timezone || DEFAULT_TZ;
   const now = ctx.now();
+  if (slot.kind === 'prn_next') {
+    const p = prnPills(state, slot.date, { tz, now }).find((x) => x.ref_id === slot.ref_id);
+    if (p) return openPrnSheet(ctx, p);
+  }
   const sheet = openSheet({ title: slot.title, content: null });
   const body = el('div', { class: 'form' });
   const statusLine = el('div', { class: 'row-between' }, el('span', { class: 'muted' }, slot.at ? `${formatDateStr(slot.date)} · ${formatTime(slot.at, tz)}` : formatDateStr(slot.date)), chip(STATUS_LABELS[slot.status] || slot.status, { done: 'ok', in_progress: 'warning', todo: 'danger', due: 'neutral', skipped: 'muted', upcoming: 'muted', open: 'muted', info: 'muted' }[slot.status] || 'muted'));
@@ -432,7 +452,7 @@ export function openSlotSheet(ctx, slot) {
       const last = lastConfirmedDose(state.events, m.id);
       body.append(el('p', { class: 'muted small', text: `Last confirmed taken: ${last ? describeWhen(fromIso(last.occurred_at), now, tz) : 'Not recorded'}` }));
       for (const n of interactionNotices(m, state.orders)) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { text: n.message })));
-      if (slot.unconfirmed) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', {}, el('strong', { text: 'Placeholder time. ' }), 'The schedule has not been confirmed yet — confirm the course start and exact times from Medications, or just record what you took.')));
+      if (slot.unconfirmed) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', {}, el('strong', { text: 'Placeholder time. ' }), slot.shifted_from ? `Moved from ${formatTime(zonedToUtc(slot.date, slot.shifted_from, tz), tz)} because ${slot.sub}. ` : '', 'The schedule has not been confirmed yet — confirm the course start and exact times from Medications, or just record what you took.')));
       if (slot.status === 'todo') body.append(el('p', { class: 'muted small', text: 'Nothing was recorded for this slot. If you are not sure whether you took it, check the label or ask the pharmacist — never double up.' }));
       body.append(el('p', { class: 'strong', text: `Did you take ${m.name} ${m.display_strength}?` }));
       body.append(el('div', { class: 'btn-row' }, button('Yes — record it', { variant: 'primary', icon: 'check', onClick: () => recordThen(initFor(slot, defaultOccurred)) })));
@@ -500,11 +520,10 @@ function openPrnSheet(ctx, p) {
   body.append(el('div', { class: 'row-between' }, el('span', { class: 'muted', text: 'As needed' }), chip(p.count ? `×${p.count} today` : 'none today', 'muted')));
   body.append(el('p', {}, el('strong', { text: 'Prescribed: ' }), m.directions));
   body.append(el('p', { class: 'muted small', text: `Last confirmed taken: ${p.last ? describeWhen(fromIso(p.last.occurred_at), now, tz) : 'Not recorded'}` }));
-  if (m.schedule?.min_interval_hours && p.last) {
-    const since = now - fromIso(p.last.occurred_at);
-    const minMs = m.schedule.min_interval_hours * 3600 * 1000;
-    body.append(el('p', { class: 'muted small', text: since < minMs ? `The label interval is every ${m.schedule.min_interval_hours}${m.schedule.max_interval_hours ? `–${m.schedule.max_interval_hours}` : ''} hours; the last recorded dose was ${relativeAgo(fromIso(p.last.occurred_at), now)}.` : `Last recorded dose was ${relativeAgo(fromIso(p.last.occurred_at), now)}.` }));
-  }
+  if (p.prediction) {
+    const pr = p.prediction;
+    body.append(el('div', { class: pr.available ? 'summary-box' : 'warning-box' }, el('strong', { text: pr.available ? `Next dose: available now (if needed)` : `Next dose: not before ${describeWhen(pr.at, now, tz)}` }), el('span', { class: 'small', text: `Label interval: every ${pr.hours}${pr.max_hours ? `–${pr.max_hours}` : ''} hours. Last recorded dose ${relativeAgo(fromIso(pr.basis.occurred_at), now)} (${formatTime(fromIso(pr.basis.occurred_at), tz)}). Recorded entries only — if you took one you didn't log, add it first.` })));
+  } else if (!p.last) body.append(el('p', { class: 'muted small', text: `No dose recorded yet. Once you log one, the next earliest time (${m.schedule?.min_interval_hours || '?'} h later) appears on the calendar.` }));
   for (const n of interactionNotices(m, state.orders)) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { text: n.message })));
   body.append(el('div', { class: 'btn-row' }, button(`Log ${p.short}`, { variant: 'primary', icon: 'check', onClick: () => { sheet.close('handoff'); actions.openQuickLog({ type: 'medication', medication_id: m.id, source: 'calendar' }); } }), button('Not now', { variant: 'ghost', onClick: () => sheet.close('later') })));
   sheet.setContent(body);

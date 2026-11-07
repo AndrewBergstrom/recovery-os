@@ -2,7 +2,7 @@
 // schedule confirmation as a new order version.
 
 import { el, chip, button, field, icon, openSheet, segmented } from '../ui.js';
-import { activeOrders, statusLabel, lastConfirmedDose, isPrn, isScheduled, isScheduleConfirmed, nextScheduledDose, confirmSchedule, versionsOf } from '../medications.js';
+import { activeOrders, statusLabel, lastConfirmedDose, isPrn, isScheduled, isScheduleConfirmed, nextScheduledDose, confirmSchedule, versionsOf, predictNextDose } from '../medications.js';
 import { acetaminophenIds, rollingTotalMg, interactionNotices, ACETAMINOPHEN_ROLLING_MAX_MG } from '../safety-rules.js';
 import { currentEvents, sortByOccurred } from '../events.js';
 import { fromIso, describeWhen, formatTime, localDateString, isValidDateStr, zonedToUtc, DEFAULT_TZ } from '../time.js';
@@ -37,6 +37,8 @@ export function renderMedications(ctx) {
           meta.append(el('span', {}, el('strong', { text: 'Schedule: ' }), `${m.schedule.times.map((t) => formatTime(zonedToUtc('2026-01-01', t, tz), tz)).join(' · ')} · ${m.schedule.course_start} → ${m.schedule.course_end || '?'}`, next ? ` · next ${formatTime(next.ms, tz)} ${next.isToday ? 'today' : 'tomorrow'}` : ''));
           meta.append(el('span', { class: 'small', text: `Confirmed by ${m.confirmed_by} on ${m.confirmed_on}` }));
         }
+        const pred = predictNextDose(m, state.events, now, tz);
+        if (pred && pred.kind !== 'scheduled') meta.append(el('span', {}, el('strong', { text: 'Next: ' }), pred.available ? `available now if needed (${pred.hours} h after your ${formatTime(fromIso(pred.basis.occurred_at), tz)} dose has passed)` : `not before ${describeWhen(pred.at, now, tz)} — ${pred.hours} h after your ${formatTime(fromIso(pred.basis.occurred_at), tz)} dose`));
         if (isPrn(m)) meta.append(el('span', { class: 'small', text: 'As needed: available to log if taken. Never shown as due or missed.' }));
         if (acetIds.includes(m.id)) meta.append(el('span', {}, el('strong', { text: 'Recorded in the preceding 24 h: ' }), `${acetTotal.toLocaleString('en-US')} mg of ${ACETAMINOPHEN_ROLLING_MAX_MG.toLocaleString('en-US')} mg (rolling, recorded entries only)`));
         card.append(meta);

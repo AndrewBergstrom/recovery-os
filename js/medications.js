@@ -134,3 +134,31 @@ export function confirmSchedule(order, { times, course_start, confirmed_by, conf
 export function versionsOf(orders, id) {
   return orders.filter((o) => o.id === id).sort((a, b) => (a.version || 1) - (b.version || 1));
 }
+
+const FREQUENCY_HOURS = { 'once daily': 24, 'twice daily': 12, 'three times daily': 8, 'four times daily': 6 };
+
+/** Hours between doses used for predictions: PRN label interval, or the stated frequency for an unconfirmed schedule. */
+export function intervalHoursFor(order) {
+  if (!order?.schedule) return null;
+  if (order.schedule.kind === 'prn') return order.schedule.min_interval_hours || null;
+  if (isScheduleConfirmed(order)) return null; // fixed, clinician-confirmed times win
+  return FREQUENCY_HOURS[order.schedule.frequency] || null;
+}
+
+/**
+ * Predict the next dose for one medication from what was actually recorded.
+ * PRN: earliest = last recorded dose + label interval (never a "due" time).
+ * Confirmed schedule: the next fixed time. Unconfirmed schedule: last dose + stated interval.
+ */
+export function predictNextDose(order, events, now, tz = DEFAULT_TZ) {
+  if (!order) return null;
+  if (isScheduleConfirmed(order)) {
+    const next = nextScheduledDose(order, now, tz);
+    return next ? { kind: 'scheduled', at: next.ms, basis: lastConfirmedDose(events, order.id) } : null;
+  }
+  const last = lastConfirmedDose(events, order.id);
+  const hours = intervalHoursFor(order);
+  if (!last || !hours) return null;
+  const earliest = fromIso(last.occurred_at) + hours * 3600 * 1000;
+  return { kind: isPrn(order) ? 'prn' : 'interval', at: earliest, hours, basis: last, available: now >= earliest, max_hours: order.schedule.max_interval_hours || null };
+}

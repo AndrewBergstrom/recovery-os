@@ -13,7 +13,7 @@
 //
 // PRN medicines never become slots: they are offered, never due.
 
-import { activeOrders, isScheduled, isScheduleConfirmed, lastConfirmedDose, medicationEventsFor } from './medications.js';
+import { activeOrders, isScheduled, isScheduleConfirmed, lastConfirmedDose, medicationEventsFor, predictNextDose, intervalHoursFor } from './medications.js';
 import { partitionExercises } from './exercises.js';
 import { currentEvents } from './events.js';
 import { zonedToUtc, localDateString, localTimeString, fromIso, addDays, formatDateStr, DEFAULT_TZ } from './time.js';
@@ -45,6 +45,8 @@ export function routineFrom(meta) {
   };
 }
 
+const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : '');
+
 export function slotId(kind, refId, dateStr, time) {
   return `${kind}:${refId}:${dateStr}:${time}`;
 }
@@ -75,7 +77,7 @@ const timeSort = (a, b) => {
 };
 
 /** All pills for one local date. Contains no statuses yet. */
-export function buildDaySlots(state, dateStr, { tz = DEFAULT_TZ, routine = routineFrom(state.meta) } = {}) {
+export function buildDaySlots(state, dateStr, { tz = DEFAULT_TZ, routine = routineFrom(state.meta), now = Date.now() } = {}) {
   const slots = [];
   const surgery = state.profile?.surgery_date;
   if (!surgery) return slots;
@@ -107,6 +109,15 @@ export function buildDaySlots(state, dateStr, { tz = DEFAULT_TZ, routine = routi
         icon: 'meds',
       });
     }
+  }
+
+  // As-needed medicines: a predicted "earliest next" pill anchored on the last recorded dose. Never due, never red.
+  for (const m of activeOrders(state.orders, 'medication')) {
+    if (isScheduled(m)) continue;
+    const pred = predictNextDose(m, state.events, now, tz);
+    if (!pred || pred.kind !== 'prn' || localDateString(pred.at, tz) !== dateStr) continue;
+    const t = localTimeString(pred.at, tz);
+    slots.push({ id: slotId('prn', m.id, dateStr, t), kind: 'prn_next', ref_id: m.id, order: m, date: dateStr, time: t, at: pred.at, title: `${m.name} ${m.display_strength}`, label: `${cap(m.short_name || m.name)} — next`, short: `${cap(m.short_name || m.name)} next`, sub: `earliest ${pred.hours} h after your ${localTimeString(fromIso(pred.basis.occurred_at), tz)} dose`, prediction: pred, optional: true, prn: true, icon: 'meds' });
   }
 
   if (dateStr >= surgery) {
@@ -185,11 +196,33 @@ export function deriveStatuses(slots, { events = [], slotStates = [], now = Date
     }
   }
   const today = localDateString(now, tz);
-  return slots.map((slot) => {
+  // Unconfirmed placeholder times adapt to what was actually taken: the next placeholder
+  // never comes sooner than the stated interval after the last recorded dose that day.
+  const shifted = new Map();
+  for (const slot of ordered) {
+    if (slot.kind !== 'medication' || !slot.unconfirmed || matched.has(slot.id)) continue;
+    const hours = intervalHoursFor(slot.order);
+    if (!hours) continue;
+    let lastMs = null;
+    for (const e of current) {
+      if (e.event_type !== 'medication' || e.medication_id !== slot.ref_id || e.status !== 'taken') continue;
+      const t = fromIso(e.occurred_at);
+      if (localDateString(t, tz) === slot.date && t < slot.at + MATCH_WINDOW_MS.medication && (lastMs == null || t > lastMs)) lastMs = t;
+    }
+    if (lastMs == null) continue;
+    const earliest = lastMs + hours * 3600 * 1000;
+    if (earliest > slot.at + 60 * 60 * 1000) {
+      if (localDateString(earliest, tz) !== slot.date) shifted.set(slot.id, { drop: true });
+      else shifted.set(slot.id, { at: earliest, time: localTimeString(earliest, tz), shifted_from: slot.time, sub: `~${hours} h after your ${localTimeString(lastMs, tz)} dose · placeholder` });
+    }
+  }
+  return slots.filter((slot) => !shifted.get(slot.id)?.drop).map((slot0) => {
+    const slot = shifted.has(slot0.id) ? { ...slot0, ...shifted.get(slot0.id) } : slot0;
     const event = matched.get(slot.id) || null;
     const slotState = states.get(slot.id) || null;
     let status;
-    if (event) {
+    if (slot.kind === 'prn_next') status = now >= slot.at ? 'available' : 'window';
+    else if (event) {
       status = event.status === 'skipped' || event.status === 'not_today' ? 'skipped' : 'done';
     } else if (slotState?.status === 'skipped') status = 'skipped';
     else if (slotState?.status === 'in_progress') status = 'in_progress';
@@ -210,6 +243,8 @@ export const STATUS_LABELS = {
   open: 'Optional',
   skipped: 'Skipped',
   info: 'Info',
+  window: 'As needed · not before',
+  available: 'As needed · available',
 };
 
 /** Fraction of required, already-due slots that are done (for the day strip rings). */
@@ -230,13 +265,14 @@ export function nextActionable(slotsWithStatus, now = Date.now()) {
 }
 
 /** PRN medicines as "available" pills with today's count and last time. */
-export function prnPills(state, dateStr, { tz = DEFAULT_TZ } = {}) {
+export function prnPills(state, dateStr, { tz = DEFAULT_TZ, now = Date.now() } = {}) {
   return activeOrders(state.orders, 'medication')
     .filter((m) => !isScheduled(m))
     .map((m) => {
       const doses = medicationEventsFor(state.events, m.id);
       const todayDoses = doses.filter((e) => localDateString(fromIso(e.occurred_at), tz) === dateStr);
       const last = lastConfirmedDose(state.events, m.id);
-      return { id: `prn:${m.id}`, kind: 'prn', ref_id: m.id, order: m, title: `${m.name} ${m.display_strength}`, short: m.short_name || m.name, count: todayDoses.length, last, flagged: !!(m.interaction_flags && m.interaction_flags.length) || m.status === 'needs_prescriber_confirmation' };
+      const prediction = predictNextDose(m, state.events, now, tz);
+      return { id: `prn:${m.id}`, kind: 'prn', ref_id: m.id, order: m, title: `${m.name} ${m.display_strength}`, short: m.short_name || m.name, count: todayDoses.length, last, prediction, flagged: !!(m.interaction_flags && m.interaction_flags.length) || m.status === 'needs_prescriber_confirmation' };
     });
 }
