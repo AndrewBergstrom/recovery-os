@@ -1,7 +1,7 @@
 // views/sync-ui.js — sign-in with an emailed code, the Settings sync card, and the
 // local configuration sheet. Nothing here touches clinical data directly.
 
-import { el, chip, button, field, icon, openSheet, confirmDialog, toast } from '../ui.js';
+import { el, chip, button, field, icon, openSheet, confirmDialog, toast, append } from '../ui.js';
 import { relativeAgo, fromIso, DEFAULT_TZ } from '../time.js';
 import { LOCAL_CONFIG_KEY } from '../sync.js';
 
@@ -140,18 +140,18 @@ export function syncCard(ctx) {
   const card = el('div', { class: 'card', id: 'sync-card' });
   card.append(el('h2', { class: 'card-title' }, 'Sync across devices', syncChip(st)));
   if (!st.configured) {
-    card.append(
+    append(card, [
       el('p', { class: 'muted small', text: 'Not configured: everything stays on this device. To sync phone ↔ laptop, create a free Supabase project, run supabase/schema.sql in its SQL editor, then put the project URL and anon key in js/config.js (or enter them here for this device).' }),
-      el('div', { class: 'btn-row' }, button('Enter project URL and key', { onClick: () => openSyncConfigSheet(ctx) }))
-    );
+      el('div', { class: 'btn-row' }, button('Enter project URL and key', { onClick: () => openSyncConfigSheet(ctx) })),
+    ]);
     return card;
   }
   if (!st.signedIn) {
-    card.append(
+    append(card, [
       el('p', { class: 'muted small', text: 'Configured. Sign in with an emailed link (or code) to start syncing. Entries made while signed out are kept and pushed once you sign in.' }),
       st.pending ? el('p', { class: 'small', text: `${st.pending} change${st.pending === 1 ? '' : 's'} waiting to sync.` }) : null,
-      el('div', { class: 'btn-row' }, button('Sign in with email', { variant: 'primary', onClick: () => openSignInSheet(ctx) }), button('Change project', { onClick: () => openSyncConfigSheet(ctx) }))
-    );
+      el('div', { class: 'btn-row' }, button('Sign in with email', { variant: 'primary', onClick: () => openSignInSheet(ctx) }), button('Change project', { onClick: () => openSyncConfigSheet(ctx) })),
+    ]);
     return card;
   }
   const meta = el('div', { class: 'card-meta' });
@@ -161,7 +161,7 @@ export function syncCard(ctx) {
   if (!st.online) meta.append(el('span', { class: 'muted', text: 'Offline — will sync when the connection is back.' }));
   if (st.lastError) meta.append(el('span', { class: 'error-box', text: `Last error: ${st.lastError}` }));
   card.append(meta);
-  card.append(
+  append(card, [
     el('div', { class: 'btn-row' },
       button(st.syncing ? 'Syncing…' : 'Sync now', { variant: 'primary', disabled: !!st.syncing, onClick: () => actions.syncNow() }),
       button('Sign out', { onClick: () => actions.signOut() })
@@ -172,8 +172,8 @@ export function syncCard(ctx) {
         el('div', { class: 'btn-row' }, button('Delete my cloud data', { variant: 'danger-soft', onClick: () => actions.deleteCloud() }))
       )
     ),
-    el('p', { class: 'muted small', text: 'How it works: every entry is saved on this device first, then pushed to your project; other signed-in devices pull it on open and about once a minute. Entries never conflict (they are append-only); settings use last-write-wins.' })
-  );
+    el('p', { class: 'muted small', text: 'How it works: every entry is saved on this device first, then pushed to your project; other signed-in devices pull it on open and about once a minute. Entries never conflict (they are append-only); settings use last-write-wins.' }),
+  ]);
   return card;
 }
 
