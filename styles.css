@@ -357,6 +357,7 @@ td.num { font-variant-numeric: tabular-nums; }
 .timeline li { display: grid; grid-template-columns: 6.5rem 1fr; gap: 10px; align-items: start; }
 .timeline .when { color: var(--muted); font-size: 0.9rem; padding-top: 2px; }
 .timeline .what { display: flex; flex-direction: column; gap: 3px; }
+.timeline li.is-unset .when { font-style: italic; opacity: 0.8; }
 
 /* ---------- Onboarding ---------- */
 .onboarding { display: flex; flex-direction: column; gap: 18px; }

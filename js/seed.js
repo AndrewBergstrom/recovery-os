@@ -310,6 +310,15 @@ export const milestones = [
     status: 'needs_confirmation',
     note: '6 weeks from the confirmed course start.',
   },
+  // The road back. These carry no dates on purpose: each one is a decision a clinician
+  // makes, recorded here (who, when) once they make it. Nothing below is a timeline.
+  { id: 'rtp-brace-off', title: 'Brace unlocked / off', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by surgeon or PT.' },
+  { id: 'rtp-full-weight-bearing', title: 'Full weight-bearing', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by surgeon or PT.' },
+  { id: 'rtp-flexion-past-90', title: 'Knee bend past 90° allowed', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by surgeon; meniscus repair keeps the limit until then.' },
+  { id: 'rtp-bike', title: 'Stationary bike', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by PT.' },
+  { id: 'rtp-running', title: 'Jogging / running', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by PT, usually after strength and hop testing.' },
+  { id: 'rtp-agility', title: 'Cutting, agility, ball work', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by PT.' },
+  { id: 'rtp-soccer', title: 'Cleared for soccer', when: { kind: 'to_be_set' }, status: 'needs_confirmation', note: 'Set by surgeon and PT together.' },
 ];
 
 export const sourceDocuments = [
