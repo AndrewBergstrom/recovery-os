@@ -9,7 +9,8 @@ export function createFakeSupabase({ otp = '123456' } = {}) {
   const rows = new Map(); // `${userId}|${store}|${key}` → row
   let clock = 1;
   let tokenSeq = 1;
-  const state = { calls: [], expireNext: false };
+  const state = { calls: [], expireNext: false, lastLink: null };
+  const linkTokens = new Map(); // token_hash → email
   const serverNow = () => new Date(1800000000000 + clock++ * 1000).toISOString();
 
   const json = (status, body) => new Response(body == null ? '' : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -30,12 +31,30 @@ export function createFakeSupabase({ otp = '123456' } = {}) {
     state.calls.push(`${method} ${u.pathname}`);
     if (opts.headers?.apikey !== 'anon-key') return json(401, { message: 'No API key found in request' });
 
-    if (u.pathname === '/auth/v1/otp') return json(200, {});
+    if (u.pathname === '/auth/v1/otp') {
+      const t = `hash-${tokenSeq++}`;
+      linkTokens.set(t, body.email);
+      state.lastLink = `https://example.supabase.co/auth/v1/verify?token=${t}&type=magiclink&redirect_to=${encodeURIComponent(u.searchParams.get('redirect_to') || '')}`;
+      return json(200, {});
+    }
     if (u.pathname === '/auth/v1/verify') {
+      if (body.token_hash) {
+        const email = linkTokens.get(body.token_hash);
+        if (!email) return json(403, { error_code: 'otp_expired', msg: 'Email link is invalid or has expired' });
+        linkTokens.delete(body.token_hash); // single use
+        const user = users.get(email) || { id: `user-${users.size + 1}`, email };
+        users.set(email, user);
+        return json(200, newSession(user));
+      }
       if (body.token !== otp) return json(403, { error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
       const user = users.get(body.email) || { id: `user-${users.size + 1}`, email: body.email };
       users.set(body.email, user);
       return json(200, newSession(user));
+    }
+    if (u.pathname === '/auth/v1/user') {
+      const sess = sessions.get(auth);
+      if (!sess) return json(401, { message: 'invalid JWT' });
+      return json(200, [...users.values()].find((x) => x.id === sess.userId));
     }
     if (u.pathname === '/auth/v1/token') {
       const userId = refreshTokens.get(body.refresh_token);
@@ -83,7 +102,13 @@ export function createFakeSupabase({ otp = '123456' } = {}) {
     return json(404, { message: `not found: ${u.pathname}` });
   }
 
-  return { fetchImpl, rows, users, state, count: (userId) => [...rows.values()].filter((r) => r.user_id === userId).length };
+  const implicitHash = (email) => {
+    const user = users.get(email) || { id: `user-${users.size + 1}`, email };
+    users.set(email, user);
+    const sess = newSession(user);
+    return `#access_token=${sess.access_token}&expires_at=${sess.expires_at}&expires_in=3600&refresh_token=${sess.refresh_token}&token_type=bearer&type=magiclink`;
+  };
+  return { fetchImpl, rows, users, state, implicitHash, count: (userId) => [...rows.values()].filter((r) => r.user_id === userId).length };
 }
 
 /** Minimal localStorage stand-in. */

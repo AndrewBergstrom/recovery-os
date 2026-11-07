@@ -7,39 +7,38 @@ Sync is optional. Without it the app is fully local. With it, every entry still 
 1. [supabase.com](https://supabase.com) → **New project** (free tier is fine). Pick a region near you.
 2. **SQL Editor** → paste the contents of [`schema.sql`](schema.sql) → **Run**.
 
-## 2. Turn on email-code sign-in
+## 2. Sign-in emails
 
-1. **Authentication → Providers → Email**: keep *Enable email provider* on. Password sign-in isn't used.
-2. **Authentication → Email Templates → Magic Link**: make sure the body contains the one-time code, for example:
+1. **Authentication → Sign In / Providers → Email**: keep *Enable email provider* on. Passwords aren't used.
+2. **Authentication → URL Configuration**: set **Site URL** to the app's address (for example `https://andrewbergstrom.github.io/recovery-os/`) and add the same address with `**` to **Redirect URLs** (`https://andrewbergstrom.github.io/recovery-os/**`). The sign-in link returns there.
+3. The built-in sender delivers only to members of your Supabase organization and is limited to about 2 emails per hour — fine for one person. New free projects can't edit the email templates until a **custom SMTP** provider is configured (Project Settings → Authentication → SMTP, e.g. Resend's free tier). With custom SMTP you can add `{{ .Token }}` to the *Magic link or OTP* template so the email also carries a 6-digit code.
 
-   ```
-   <h2>Your Recovery OS code</h2>
-   <p>Enter this code in the app: <strong>{{ .Token }}</strong></p>
-   ```
+### How signing in works in the app
 
-   The app signs in with the 6-digit code rather than a link, because a link opened from Mail lands in Safari instead of the installed home-screen app.
-3. Optional but recommended: **Authentication → Sign In / Up → Allow new users to sign up** can be turned *off* after your first sign-in, so only your account exists.
+Settings → Sync across devices → **Sign in with email**. The email contains a link (and a code, if you set up SMTP). Any of these finishes the sign-in:
 
-The built-in email sender is rate-limited (a few emails per hour) — plenty for one person. For anything more, add a custom SMTP provider under **Project Settings → Authentication**.
+- **Tap the link** — it opens the site, which picks up the session automatically. Easiest on a laptop.
+- **Paste the link** — on an iPhone, a tapped link opens Safari rather than the installed home-screen app. Long-press the link in Mail → *Copy*, open the app, and paste it into *Paste the sign-in link*. The app verifies the link's token directly. Links are single-use.
+- **Enter the code** — if the email shows one.
 
 ## 3. Point the app at the project
 
-**Project Settings → API**: copy the **Project URL** and the **anon public** key.
+**Project Settings → API Keys**: copy the **Project URL** and the **publishable** key (`sb_publishable_…`; older projects call it the *anon* key).
 
 Either put them in [`js/config.js`](../js/config.js) and push (every device gets them):
 
 ```js
 export const SUPABASE_URL = 'https://xxxx.supabase.co';
-export const SUPABASE_ANON_KEY = 'eyJ…';
+export const SUPABASE_ANON_KEY = 'sb_publishable_…';
 ```
 
 …or, on one device only, enter them in the app under **Settings → Sync across devices → Enter project URL and key**.
 
-The anon key is designed to be public; the row-level security policy in `schema.sql` is what keeps your rows private. Keep the **service_role** key out of the app and out of the repo.
+The publishable key is designed to be public; the row-level security policy in `schema.sql` is what keeps your rows private. Keep the **secret** key out of the app and out of the repo.
 
 ## 4. Sign in on each device
 
-**Settings → Sync across devices → Sign in with email code.** The first sign-in creates the account. On a second device the care plan, entries and settings sync down and the setup review is skipped.
+**Settings → Sync across devices → Sign in with email.** The first sign-in creates the account. On a second device the care plan, entries and settings sync down and the setup review is skipped. Optional hardening after your first sign-in: **Authentication → Sign In / Up → Allow new users to sign up: off**, so only your account can exist.
 
 ## How conflicts are handled
 

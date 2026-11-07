@@ -23,7 +23,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.3.1';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -484,6 +484,9 @@ async function registerServiceWorker() {
 
 async function boot() {
   applyPrefs(state.prefs);
+  // A magic-link redirect lands here with tokens in the hash. Take them out of the URL first.
+  const incomingHash = location.hash && (location.hash.includes('access_token=') || location.hash.includes('error=')) ? location.hash : null;
+  if (incomingHash) history.replaceState(null, '', `${location.pathname}${location.search}#today`);
   document.getElementById('skip-link')?.addEventListener('click', (e) => {
     e.preventDefault();
     document.getElementById('main')?.focus();
@@ -510,6 +513,21 @@ async function boot() {
       },
     });
     ctx.sync = sync;
+    if (incomingHash) {
+      const err = client.hashError(incomingHash);
+      if (err) toast(`Sign-in link problem: ${err.replace(/\+/g, ' ')}`);
+      else {
+        try {
+          if (await client.adoptSessionFromHash(incomingHash)) {
+            sync.status.signedIn = true;
+            sync.status.email = client.email;
+            toast(`Signed in as ${client.email}`);
+          }
+        } catch (e) {
+          toast(e.message);
+        }
+      }
+    }
     await ensureSeed();
     await loadState();
     const activation = state.meta.activation;

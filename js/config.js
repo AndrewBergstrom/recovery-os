@@ -1,8 +1,7 @@
-// config.js — optional cross-device sync via your own Supabase project.
-// Leave both empty to run fully local (the default). The anon key is a public
-// key by design; row-level security in supabase/schema.sql keeps data private
-// to the signed-in account. Values can also be entered in Settings → Sync,
-// which overrides these on that device only.
+// config.js — cross-device sync via the patient's own Supabase project.
+// The publishable (anon) key is public by design; row-level security in
+// supabase/schema.sql keeps rows private to the signed-in account. Values can
+// also be entered in Settings → Sync, which overrides these on that device only.
 
-export const SUPABASE_URL = '';
-export const SUPABASE_ANON_KEY = '';
+export const SUPABASE_URL = 'https://aialohixjtwlmvywqqpe.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_qwgCKRie180LXG1p_WKE7Q_o2iqvhws';

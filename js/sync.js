@@ -127,8 +127,51 @@ export function createSupabaseClient({ url = '', anonKey = '', fetchImpl = typeo
     get email() {
       return session?.user?.email || null;
     },
-    async signInStart(email) {
-      await request('/auth/v1/otp', { method: 'POST', auth: false, body: { email, create_user: true } });
+    /** Sends the sign-in email. The link (default template) returns to redirectTo; a code is included only if the project's template has {{ .Token }}. */
+    async signInStart(email, { redirectTo } = {}) {
+      const q = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+      await request(`/auth/v1/otp${q}`, { method: 'POST', auth: false, body: { email, create_user: true } });
+    },
+    /** Sign in from a pasted magic link (long-press → Copy on iPhone): the link's token is verified directly, so the installed app gets the session. */
+    async signInVerifyLink(linkText) {
+      let u;
+      try {
+        u = new URL(String(linkText).trim());
+      } catch {
+        throw new Error('That does not look like the sign-in link from the email.');
+      }
+      const tokenHash = u.searchParams.get('token') || u.searchParams.get('token_hash');
+      const type = u.searchParams.get('type') || 'magiclink';
+      if (!tokenHash) throw new Error('The link has no sign-in token. Copy the whole link from the email.');
+      const data = await request('/auth/v1/verify', { method: 'POST', auth: false, body: { type, token_hash: tokenHash } });
+      if (!data?.access_token) throw new Error('Sign-in did not return a session.');
+      session = data;
+      save();
+      return session;
+    },
+    /** Adopt a session from the URL hash after a magic-link redirect (implicit flow). Returns true if one was found. */
+    async adoptSessionFromHash(hash) {
+      const h = String(hash || '').replace(/^#\/?/, '');
+      if (!h.includes('access_token=')) return false;
+      const params = new URLSearchParams(h);
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      if (!access_token || !refresh_token) return false;
+      session = { access_token, refresh_token, token_type: params.get('token_type') || 'bearer', expires_in: Number(params.get('expires_in') || 3600), expires_at: Number(params.get('expires_at') || Math.floor(now() / 1000) + 3600), user: null };
+      try {
+        session.user = await request('/auth/v1/user');
+      } catch (e) {
+        session = null;
+        throw new Error(`The sign-in link was accepted but the account could not be loaded: ${e.message}`);
+      }
+      save();
+      return true;
+    },
+    hashError(hash) {
+      const h = String(hash || '').replace(/^#\/?/, '');
+      if (!h.includes('error=') && !h.includes('error_description=')) return null;
+      const params = new URLSearchParams(h);
+      return params.get('error_description') || params.get('error_code') || params.get('error');
     },
     async signInVerify(email, token) {
       const data = await request('/auth/v1/verify', { method: 'POST', auth: false, body: { type: 'email', email, token: String(token).trim() } });

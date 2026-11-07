@@ -34,7 +34,16 @@ export function openSignInSheet(ctx, { onSignedIn } = {}) {
     errors.textContent = m;
     errors.classList.remove('hidden');
   };
+  const link = el('textarea', { placeholder: 'Paste the whole sign-in link here', rows: '3', autocomplete: 'off', spellcheck: 'false' });
   const sheet = openSheet({ title: 'Sign in to sync', content: null });
+  const finish = async (label) => {
+    toast(`Signed in as ${label}`);
+    sheet.close('signed-in');
+    const r = await sync.afterSignIn();
+    if (r?.error) toast(`Signed in, but sync failed: ${r.error}`);
+    onSignedIn && onSignedIn(r);
+  };
+  const standalone = typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches;
   let step = 1;
   const render = () => {
     errors.classList.add('hidden');
@@ -43,39 +52,51 @@ export function openSignInSheet(ctx, { onSignedIn } = {}) {
         el('form', { class: 'form', onsubmit: async (e) => {
           e.preventDefault();
           try {
-            await sync.client.signInStart(email.value.trim());
+            await sync.client.signInStart(email.value.trim(), { redirectTo: `${location.origin}${location.pathname}` });
             step = 2;
             render();
           } catch (err) {
             showError(err.message);
           }
         } },
-          el('p', { class: 'muted', text: 'Enter the email for your Supabase-backed account. You will get a 6-digit code by email — no password, no link to tap.' }),
+          el('p', { class: 'muted', text: 'Enter your email. You will get a sign-in email — no password.' }),
           field('Email', email, { required: true }),
           errors,
-          el('div', { class: 'btn-row' }, button('Cancel', { onClick: () => sheet.close('cancel') }), button('Send code', { variant: 'primary', type: 'submit' }))
+          el('div', { class: 'btn-row' }, button('Cancel', { onClick: () => sheet.close('cancel') }), button('Send sign-in email', { variant: 'primary', type: 'submit' }))
         )
       );
     } else {
       sheet.setContent(
-        el('form', { class: 'form', onsubmit: async (e) => {
-          e.preventDefault();
-          try {
-            await sync.client.signInVerify(email.value.trim(), code.value.trim());
-            toast(`Signed in as ${email.value.trim()}`);
-            sheet.close('signed-in');
-            const r = await sync.afterSignIn();
-            if (r?.error) toast(`Signed in, but sync failed: ${r.error}`);
-            onSignedIn && onSignedIn(r);
-          } catch (err) {
-            showError(err.message);
-          }
-        } },
-          el('p', { class: 'muted', text: `Code sent to ${email.value.trim()}. It expires after a few minutes.` }),
-          field('Code', code, { required: true }),
+        el('div', { class: 'form' },
+          el('p', { class: 'muted', text: `Email sent to ${email.value.trim()}. It expires after a few minutes. Three ways to finish:` }),
+          el('div', { class: 'summary-box' }, el('strong', { text: standalone ? '1. On this installed app: copy the link' : '1. Tap the link in the email' }), el('span', { class: 'small', text: standalone ? 'A tapped link opens in the browser, not in this home-screen app. Instead, long-press the link in the email → Copy, then paste it below.' : 'This page picks up the sign-in automatically when the link opens here.' })),
+          el('form', { class: 'form', onsubmit: async (e) => {
+            e.preventDefault();
+            try {
+              await sync.client.signInVerifyLink(link.value);
+              await finish(email.value.trim());
+            } catch (err) {
+              showError(err.message);
+            }
+          } },
+            field(standalone ? 'Paste the sign-in link' : '2. Or paste the sign-in link', link),
+            el('div', { class: 'btn-row' }, button('Sign in with pasted link', { variant: 'primary', type: 'submit' }))
+          ),
+          el('form', { class: 'form', onsubmit: async (e) => {
+            e.preventDefault();
+            try {
+              await sync.client.signInVerify(email.value.trim(), code.value.trim());
+              await finish(email.value.trim());
+            } catch (err) {
+              showError(err.message);
+            }
+          } },
+            field(standalone ? 'Or enter the code, if the email shows one' : '3. Or enter the code, if the email shows one', code),
+            el('div', { class: 'btn-row' }, button('Verify code', { type: 'submit' }))
+          ),
           errors,
-          el('div', { class: 'btn-row' }, button('Back', { icon: 'back', onClick: () => { step = 1; render(); } }), button('Verify', { variant: 'primary', type: 'submit' })),
-          el('p', { class: 'muted small', text: 'If the email only shows a link instead of a code, the project’s "Magic Link" email template needs {{ .Token }} added — see supabase/README.md.' })
+          el('div', { class: 'btn-row' }, button('Back', { icon: 'back', onClick: () => { step = 1; render(); } }), button('Resend email', { variant: 'ghost', onClick: async () => { try { await sync.client.signInStart(email.value.trim(), { redirectTo: `${location.origin}${location.pathname}` }); toast('Sent again'); } catch (err) { showError(err.message); } } })),
+          el('p', { class: 'muted small', text: 'The default Supabase email carries a link only; a code appears once the project uses custom SMTP with {{ .Token }} in the template (see supabase/README.md). Links are single-use.' })
         )
       );
     }
@@ -127,9 +148,9 @@ export function syncCard(ctx) {
   }
   if (!st.signedIn) {
     card.append(
-      el('p', { class: 'muted small', text: 'Configured. Sign in with an emailed code to start syncing. Entries made while signed out are kept and pushed once you sign in.' }),
+      el('p', { class: 'muted small', text: 'Configured. Sign in with an emailed link (or code) to start syncing. Entries made while signed out are kept and pushed once you sign in.' }),
       st.pending ? el('p', { class: 'small', text: `${st.pending} change${st.pending === 1 ? '' : 's'} waiting to sync.` }) : null,
-      el('div', { class: 'btn-row' }, button('Sign in with email code', { variant: 'primary', onClick: () => openSignInSheet(ctx) }), button('Change project', { onClick: () => openSyncConfigSheet(ctx) }))
+      el('div', { class: 'btn-row' }, button('Sign in with email', { variant: 'primary', onClick: () => openSignInSheet(ctx) }), button('Change project', { onClick: () => openSyncConfigSheet(ctx) }))
     );
     return card;
   }

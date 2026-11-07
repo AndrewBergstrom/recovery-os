@@ -174,3 +174,23 @@ test('sync is a no-op when not configured or signed out, and never touches the o
   await sync.enqueue('events', dose('med-aspirin-81', 81, 1, la('2026-11-07', '08:00')));
   assert.equal(await store.count('outbox'), 1, 'writes still queue, ready for when sync is configured');
 });
+
+test('link sign-in: pasted magic link and redirect hash both produce a working session', async () => {
+  const server = createFakeSupabase();
+  const A = await device(server);
+  await A.client.signInStart('andrew@example.com', { redirectTo: 'https://andrewbergstrom.github.io/recovery-os/' });
+  assert.match(server.state.lastLink, /verify\?token=hash-\d+&type=magiclink&redirect_to=https%3A%2F%2Fandrewbergstrom/);
+  await A.client.signInVerifyLink(server.state.lastLink);
+  assert.equal(A.client.email, 'andrew@example.com');
+  await assert.rejects(A.client.signInVerifyLink(server.state.lastLink), /invalid or has expired/, 'links are single-use');
+  await assert.rejects(A.client.signInVerifyLink('not a link'), /does not look like/);
+  const B = await device(server);
+  assert.equal(await B.client.adoptSessionFromHash('#today'), false);
+  assert.equal(await B.client.adoptSessionFromHash(server.implicitHash('andrew@example.com')), true);
+  assert.equal(B.client.userId, A.client.userId, 'same account on both devices');
+  assert.equal(B.client.hashError('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'), 'Email link is invalid or has expired');
+  await B.sync.afterSignIn();
+  await write(B, 'events', dose('med-aspirin-81', 81, 1, la('2026-11-07', '08:00')));
+  await B.sync.syncNow();
+  assert.equal(server.count(B.client.userId), 1);
+});
