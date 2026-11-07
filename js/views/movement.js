@@ -5,7 +5,7 @@ import { el, chip, button, field, icon, openSheet, segmented } from '../ui.js';
 import { partitionExercises, markCleared, exerciseSessions } from '../exercises.js';
 import { sortByOccurred } from '../events.js';
 import { fromIso, localDateString, isValidDateStr, DEFAULT_TZ } from '../time.js';
-import { eventList } from './shared.js';
+import { eventList, exerciseGuideBlock } from './shared.js';
 
 export function renderMovement(ctx) {
   const { state, actions } = ctx;
@@ -23,10 +23,8 @@ export function renderMovement(ctx) {
     const card = el('div', { class: `card${isCleared ? '' : ' card-warning'}` });
     card.append(el('div', { class: 'card-title' }, x.name, chip(isCleared ? 'Cleared' : 'Pending clinician confirmation', isCleared ? 'ok' : 'warning')));
     const meta = el('div', { class: 'card-meta' });
-    meta.append(el('span', { text: x.how_to }));
-    meta.append(el('span', {}, el('strong', { text: 'Parameters: ' }), x.parameters));
-    meta.append(el('span', {}, el('strong', { text: 'Guardrail: ' }), x.guardrail));
     if (isCleared) meta.append(el('span', { class: 'small', text: `Cleared by ${x.cleared_by} on ${x.cleared_on} · ${x.instructions_version}` }));
+    card.append(exerciseGuideBlock(x));
     card.append(meta);
     const row = el('div', { class: 'card-actions' });
     if (isCleared) row.append(button(`Start ${x.name.toLowerCase()}`, { variant: 'primary', onClick: () => actions.openQuickLog({ type: 'exercise', exercise_id: x.id, source: 'movement_view' }) }));

@@ -5,6 +5,7 @@ import { el, chip, button, field, icon, openSheet, segmented, toast, copyText, d
 import { fromIso, formatTime, datetimeLocalValue, parseDatetimeLocal, describeWhen, DEFAULT_TZ } from '../time.js';
 import { describeEvent, createCorrection, CORRECTION_REASONS, supersededIds } from '../events.js';
 import { isSample } from '../sample-data.js';
+import { exerciseGuide, exerciseDiagram } from '../exercise-guides.js';
 
 export function statusChipFor(status) {
   const map = {
@@ -192,3 +193,20 @@ export function iconFor(type) {
 }
 
 export { icon };
+
+/**
+ * Visual guide for one exercise: the start → finish diagram, numbered steps and the
+ * guardrail. `compact` collapses the steps behind a disclosure for tight sheets.
+ */
+export function exerciseGuideBlock(order, { compact = false, showGuardrail = true } = {}) {
+  const guide = exerciseGuide(order.id);
+  const wrap = el('div', { class: `ex-guide${compact ? ' ex-guide-compact' : ''}` });
+  const art = exerciseDiagram(order.id);
+  if (art) wrap.append(el('div', { class: 'ex-art-wrap' }, art));
+  const steps = guide ? el('ol', { class: 'ex-steps' }, guide.steps.map((t) => el('li', { text: t }))) : el('p', { class: 'muted small', text: order.how_to });
+  if (compact) wrap.append(el('details', { class: 'ex-steps-details' }, el('summary', { text: 'Step by step' }), steps));
+  else wrap.append(steps);
+  if (showGuardrail) wrap.append(el('div', { class: 'banner banner-info ex-guardrail' }, icon('alert'), el('span', {}, el('strong', { text: 'Guardrail: ' }), order.guardrail)));
+  if (order.parameters) wrap.append(el('p', { class: 'muted small ex-params' }, el('strong', { text: 'Assigned: ' }), order.parameters));
+  return wrap;
+}

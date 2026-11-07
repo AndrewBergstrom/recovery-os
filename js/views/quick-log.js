@@ -7,7 +7,7 @@ import { activeOrders, isPrn, statusLabel, totalMg, lastConfirmedDose } from '..
 import { partitionExercises, SYMPTOM_RESPONSES, SESSION_OUTCOMES } from '../exercises.js';
 import { acetaminophenCheck, orderRollingCheck, duplicateCheck, interactionNotices, HIGH_PRIORITY_SYMPTOMS, escalationFor, acetaminophenIds } from '../safety-rules.js';
 import { fromIso, describeWhen, formatTime, DEFAULT_TZ } from '../time.js';
-import { timePicker, enteredBy } from './shared.js';
+import { timePicker, enteredBy, exerciseGuideBlock } from './shared.js';
 
 const TYPES = [
   { id: 'medication', label: 'Medication', icon: 'meds' },
@@ -270,6 +270,7 @@ function exerciseForm(ctx, init, { onRecord, onBack }) {
     guard.classList.toggle('hidden', !selected);
     if (!selected) return;
     guard.replaceChildren(icon('alert'), el('span', {}, el('strong', { text: 'Guardrail: ' }), selected.guardrail));
+    fieldsWrap.append(exerciseGuideBlock(selected, { compact: true, showGuardrail: false }));
     const tr = selected.tracking || [];
     const grid = el('div', { class: 'inline-fields' });
     if (tr.includes('sets')) grid.append(field('Sets', sets));

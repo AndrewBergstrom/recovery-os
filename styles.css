@@ -562,3 +562,34 @@ html[data-theme="dark"] { --k-meds: #a9afe8; --k-move: #f0a26b; --k-ice: #7fc4e6
 .sync-dot[data-state="syncing"] { background: var(--c-due); }
 .sync-dot[data-state="error"] { background: var(--c-todo); }
 .sync-dot[data-state="offline"], .sync-dot[data-state="off"] { background: var(--c-neutral); }
+
+/* Exercise guides: start → finish diagram + numbered steps */
+.ex-guide { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 6px; }
+.ex-art-wrap { background: color-mix(in srgb, var(--surface) 70%, var(--bg)); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 6px 8px; }
+.ex-art { width: 100%; height: auto; display: block; color: var(--text); max-width: 560px; margin: 0 auto; }
+.ex-bed { stroke: var(--muted); stroke-width: 2; stroke-linecap: round; opacity: 0.8; }
+.ex-divider { stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.ex-head { fill: none; stroke: currentColor; stroke-width: 3; }
+.ex-body { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.ex-body.ex-active { stroke: var(--k-move); }
+.ex-body.ex-thick { stroke-width: 8; }
+.ex-joint { fill: var(--surface); stroke: currentColor; stroke-width: 2; }
+.ex-strap { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 4 3; }
+.ex-arrow { fill: none; stroke: var(--k-move); stroke-width: 2.5; stroke-linecap: round; }
+.ex-arrowhead { fill: var(--k-move); }
+.ex-angle { fill: none; stroke: var(--k-move); stroke-width: 1.5; stroke-dasharray: 2 2; }
+.ex-support { fill: color-mix(in srgb, var(--k-ice) 25%, transparent); stroke: var(--k-ice); stroke-width: 1.5; }
+.ex-cross { stroke: var(--danger); stroke-width: 2.5; stroke-linecap: round; }
+.ex-pulse { fill: none; stroke: var(--k-move); stroke-width: 1.5; stroke-linecap: round; opacity: 0.7; }
+.ex-brace-band { stroke: var(--primary); stroke-width: 3; stroke-linecap: round; opacity: 0.9; }
+.ex-brace-bar { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linejoin: round; opacity: 0.9; }
+.ex-label { font-size: 10px; font-weight: 600; fill: var(--muted); font-family: inherit; }
+.ex-label-strong { fill: var(--k-move); }
+.ex-frame-title { font-size: 11px; font-weight: 700; fill: var(--text); font-family: inherit; }
+.ex-steps { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem; }
+.ex-steps li::marker { font-weight: 700; color: var(--k-move); }
+.ex-steps-details summary { cursor: pointer; font-weight: 650; }
+.ex-steps-details[open] summary { margin-bottom: 6px; }
+.ex-guardrail { margin: 0; }
+.ex-params { margin: 0; }
+.ex-guide-compact .ex-art { max-width: 420px; }

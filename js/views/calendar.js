@@ -11,7 +11,7 @@ import { describeEvent, currentEvents } from '../events.js';
 import { lastConfirmedDose, isScheduleConfirmed } from '../medications.js';
 import { partitionExercises } from '../exercises.js';
 import { HIGH_PRIORITY_SYMPTOMS, ESCALATION_TEXT, PRODUCT_BOUNDARY, weightBearingState, interactionNotices } from '../safety-rules.js';
-import { openCorrectionSheet } from './shared.js';
+import { openCorrectionSheet, exerciseGuideBlock } from './shared.js';
 import { memberBanner } from './care-ui.js';
 
 let tick = null;
@@ -629,7 +629,7 @@ export function openSlotSheet(ctx, slot) {
     }
     case 'ice_elevate':
     case 'exercise': {
-      if (slot.kind === 'exercise') body.append(el('div', { class: 'banner banner-info' }, icon('alert'), el('span', {}, el('strong', { text: 'Guardrail: ' }), slot.order.guardrail)), el('p', { class: 'muted small', text: `${slot.order.how_to} ${slot.order.parameters}` }));
+      if (slot.kind === 'exercise') body.append(exerciseGuideBlock(slot.order, { compact: slot.status === 'in_progress' }));
       else body.append(el('p', { class: 'muted small', text: 'Handout: 20–30 minutes with a dry barrier between the whole cold pad and skin. Elevate with the heel supported, nothing behind the knee.' }));
       if (slot.status === 'in_progress') {
         const started = fromIso(slot.slotState.at);
