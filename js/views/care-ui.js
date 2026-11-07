@@ -147,7 +147,7 @@ export function renderAcceptInvite(ctx, { token, onAccepted }) {
 export function memberBanner(ctx) {
   const scope = ctx.state.sync?.scope;
   if (!scope || scope.mode !== 'member') return null;
-  return el('div', { class: 'banner banner-info banner-compact' }, icon('calm'), el('span', {}, el('strong', { text: `Care partner view · ${scope.ownerName || 'their'} recovery` }), ` · you are logged as ${scope.memberName}`));
+  return el('div', { class: 'banner banner-info banner-compact' }, icon('calm'), el('span', {}, el('strong', { text: `Care partner view · ${scope.ownerName ? `${scope.ownerName}’s` : 'their'} recovery` }), ` · your entries are logged as ${scope.memberName}`));
 }
 
 // ---------- Reminders card (owner or member) ----------

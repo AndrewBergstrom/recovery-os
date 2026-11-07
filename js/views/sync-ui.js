@@ -155,7 +155,7 @@ export function syncCard(ctx) {
     return card;
   }
   const meta = el('div', { class: 'card-meta' });
-  if (st.scope?.mode === 'member') meta.append(el('span', {}, el('strong', { text: 'Care partner: ' }), `${st.scope.memberName} · connected to ${st.scope.ownerName || 'their'} recovery`));
+  if (st.scope?.mode === 'member') meta.append(el('span', {}, el('strong', { text: 'Care partner: ' }), `${st.scope.memberName} · connected to ${st.scope.ownerName ? `${st.scope.ownerName}’s` : 'their'} recovery`));
   else meta.append(el('span', {}, el('strong', { text: 'Account: ' }), st.email || (st.signedIn ? 'signed in' : '—')));
   meta.append(el('span', {}, el('strong', { text: 'Last sync: ' }), st.lastSyncAt ? relativeAgo(fromIso(st.lastSyncAt), ctx.now()) : 'not yet'));
   meta.append(el('span', {}, el('strong', { text: 'Waiting to push: ' }), String(st.pending || 0)));
