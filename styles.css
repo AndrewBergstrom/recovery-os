@@ -418,7 +418,7 @@ html[data-theme="dark"] { --c-done: #7fc79c; --c-progress: #e0b65a; --c-todo: #e
 }
 .glance-chip:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 .glance-chip-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--pill); flex: none; }
-.glance-chip.pill-upcoming .glance-chip-dot, .glance-chip.pill-open .glance-chip-dot { background: transparent; border: 2px solid var(--pill); }
+.glance-chip.pill-upcoming .glance-chip-dot, .glance-chip.pill-open .glance-chip-dot, .glance-chip.pill-info .glance-chip-dot { background: transparent; border: 2px solid var(--pill); }
 .glance-chip.pill-due { box-shadow: 0 0 0 3px var(--c-due-fill); }
 .glance-ok { color: var(--ok); font-size: 0.85rem; font-weight: 650; margin: 0; }
 @media (max-width: 420px) { .glance-row { grid-template-columns: 1fr; gap: 4px; } }

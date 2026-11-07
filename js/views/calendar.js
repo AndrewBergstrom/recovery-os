@@ -154,11 +154,29 @@ function glancePanel(ctx, slots, { selected, today }) {
   if (medsLeft.length) panel.append(row('meds', 'Meds', medsLeft.map((s) => chipFor(s, true))));
   else if (medsDone.length) panel.append(row('meds', 'Meds', allDoneNote(medsDone.length === 1 ? 'Scheduled dose' : 'All scheduled doses')));
 
-  // Exercises: cleared ones by session; otherwise say plainly why there are none
-  const exLeft = left.filter((s) => s.kind === 'exercise');
+  // Exercises: one chip per session time ("9:30 AM · 1/4"); tapping it lists that session's exercises.
+  const exAll = planned.filter((s) => s.kind === 'exercise');
+  const exLeft = exAll.filter(isLeft);
   const exDone = done.filter((s) => s.kind === 'exercise');
-  if (exLeft.length) panel.append(row('move', 'Exercises', exLeft.map((s) => chipFor(s, true))));
-  else if (exDone.length) panel.append(row('move', 'Exercises', allDoneNote('Cleared exercises')));
+  if (exLeft.length) {
+    const sessions = new Map();
+    for (const s of exAll) {
+      if (!sessions.has(s.time)) sessions.set(s.time, []);
+      sessions.get(s.time).push(s);
+    }
+    const chips = [...sessions.entries()]
+      .filter(([, group]) => group.some(isLeft))
+      .map(([time, group]) => {
+        const rank = { in_progress: 0, due: 1, todo: 2, upcoming: 3, open: 4 };
+        const status = group.filter(isLeft).sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9))[0].status;
+        const doneN = group.filter((s) => s.status === 'done').length;
+        const at = group[0].at;
+        const b = el('button', { type: 'button', class: `glance-chip pill-${status}`, 'aria-label': `Exercise session ${formatTime(at, tz)}, ${doneN} of ${group.length} done`, onclick: () => openSessionSheet(ctx, group, at) });
+        b.append(el('span', { class: 'glance-chip-dot', 'aria-hidden': 'true' }), `${formatTime(at, tz)} · ${doneN}/${group.length}`);
+        return b;
+      });
+    panel.append(row('move', 'Exercises', chips));
+  } else if (exDone.length) panel.append(row('move', 'Exercises', allDoneNote('Cleared exercises')));
   else if (!cleared.length) panel.append(row('move', 'Exercises', el('span', { class: 'muted small' }, pending.length ? `None cleared yet — ${pending.length} from your paperwork ${pending.length === 1 ? 'is' : 'are'} waiting on a clinician's OK. ` : 'None cleared yet. ', el('a', { href: '#movement', text: 'Mark cleared in Movement' }))));
 
   // Ice + elevate
@@ -172,9 +190,37 @@ function glancePanel(ctx, slots, { selected, today }) {
   if (ci.some(isLeft)) panel.append(row('pulse', 'Check-in', ci.filter(isLeft).map((s) => chipFor(s, false))));
   else if (ci.some((s) => s.status === 'done')) panel.append(row('pulse', 'Check-in', allDoneNote('Check-in')));
 
+  // Appointments and milestones on this day
+  const visits = slots.filter((s) => s.kind === 'appointment' || s.kind === 'milestone');
+  if (visits.length) {
+    panel.append(row('plan', 'Visits', visits.map((s) => {
+      const b = el('button', { type: 'button', class: `glance-chip pill-${s.kind === 'appointment' ? 'info' : 'open'}`, 'aria-label': `${s.title}${s.at ? `, ${formatTime(s.at, tz)}` : ''}`, onclick: () => openSlotSheet(ctx, s) });
+      b.append(el('span', { class: 'glance-chip-dot', 'aria-hidden': 'true' }), `${s.kind === 'appointment' && s.appointment?.with ? `${s.title} · ` : `${s.title}${s.at ? ' · ' : ''}`}${s.at ? formatTime(s.at, tz) : ''}`);
+      return b;
+    })));
+  }
+
   if (!left.length && planned.length) panel.append(el('p', { class: 'glance-ok', text: isToday ? 'Everything planned for today is recorded.' : 'Nothing planned.' }));
-  if (!planned.length) panel.append(el('p', { class: 'muted small', text: 'Nothing scheduled for this day.' }));
+  if (!planned.length && !visits.length) panel.append(el('p', { class: 'muted small', text: 'Nothing scheduled for this day.' }));
   return panel;
+}
+
+/** One exercise session (all cleared exercises at one routine time) as a list of pills. */
+function openSessionSheet(ctx, group, at) {
+  const tz = ctx.state.profile.timezone || DEFAULT_TZ;
+  const doneN = group.filter((s) => s.status === 'done').length;
+  const sheet = openSheet({
+    title: `Exercises · ${formatTime(at, tz)}`,
+    content: el('div', { class: 'form' },
+      el('p', { class: 'muted small', text: `${doneN} of ${group.length} recorded. Tap an exercise to start it or record it; stopping early or "not today" never counts against you.` }),
+      el('div', { class: 'cal-pills cal-pills-big' }, ...group.map((s) => pill(ctx, s, { big: true, showTime: false }))),
+      el('div', { class: 'btn-row' }, button('Close', { onClick: () => sheet.close('close') }))
+    ),
+  });
+  // Pills open their own sheet on top; close this one so the stack stays shallow.
+  sheet.panel.addEventListener('click', (e) => {
+    if (e.target.closest('.pill')) sheet.close('handoff');
+  }, true);
 }
 
 function legend() {
