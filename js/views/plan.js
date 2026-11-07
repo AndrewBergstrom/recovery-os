@@ -100,7 +100,12 @@ export function renderPlan(ctx) {
       el('ul', { class: 'timeline' },
         state.milestones
           .map((m) => ({ m, d: milestoneDate(m, state.profile.surgery_date) }))
-          .sort((a, b) => ((a.d?.from || '9999') < (b.d?.from || '9999') ? -1 : 1))
+          .sort((a, b) => {
+            const da = a.d?.from || '9999';
+            const db = b.d?.from || '9999';
+            if (da !== db) return da < db ? -1 : 1;
+            return roadRank(a.m.id) - roadRank(b.m.id);
+          })
           .map(({ m, d }) => el('li', { class: d ? '' : 'is-unset' }, el('span', { class: 'when', text: d ? d.label : 'Date not set yet' }), el('div', { class: 'what' }, el('span', {}, el('strong', { text: m.title }), ' ', statusChipFor(m.status)), m.note ? el('span', { class: 'muted small', text: m.note }) : null, el('span', {}, button(m.status === 'confirmed' ? 'Edit date' : 'Confirm date', { variant: 'ghost', cls: 'small', onClick: () => openMilestoneSheet(ctx, m) })))))
       ),
       el('p', { class: 'muted small', text: 'Milestones are informational until an appointment is actually confirmed. The undated ones are the road back: each gets its date only when a clinician sets it.' })
@@ -242,6 +247,13 @@ function openMilestoneSheet(ctx, m) {
       el('div', { class: 'btn-row' }, button('Cancel', { onClick: () => sheet.close('cancel') }), button('Mark confirmed', { variant: 'primary', type: 'submit' }))
     ),
   });
+}
+
+// Undated "road back" milestones are listed in rehab order, not alphabetically.
+const ROAD_ORDER = ['rtp-brace-off', 'rtp-full-weight-bearing', 'rtp-flexion-past-90', 'rtp-bike', 'rtp-running', 'rtp-agility', 'rtp-soccer'];
+function roadRank(id) {
+  const i = ROAD_ORDER.indexOf(id);
+  return i === -1 ? ROAD_ORDER.length : i;
 }
 
 function openAppointmentSheet(ctx, a = null) {
