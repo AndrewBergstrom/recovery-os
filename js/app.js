@@ -23,7 +23,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.3.1';
+export const APP_VERSION = '0.3.3';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -499,6 +499,7 @@ async function boot() {
     sync = createSync({
       store,
       client,
+      seedDocs: () => seedItems(toIso(nowMs())),
       onStatus: (st) => {
         state.sync = st;
         renderSyncDot(st);

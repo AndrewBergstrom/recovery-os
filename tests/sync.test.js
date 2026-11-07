@@ -15,7 +15,7 @@ async function device(server, { clockStart = la('2026-11-07', '08:00') } = {}) {
   const now = () => (t += 1000);
   const client = createSupabaseClient({ url: 'https://example.supabase.co', anonKey: 'anon-key', fetchImpl: server.fetchImpl, storage: memoryStorage(), now });
   const changes = [];
-  const sync = createSync({ store, client, now, onChange: (c) => changes.push(c), online: () => true });
+  const sync = createSync({ store, client, now, seedDocs: () => seedItems(toIso(now())), onChange: (c) => changes.push(c), online: () => true });
   return { store, client, sync, changes, now, setTime: (ms) => (t = ms) };
 }
 
@@ -193,4 +193,30 @@ test('link sign-in: pasted magic link and redirect hash both produce a working s
   await write(B, 'events', dose('med-aspirin-81', 81, 1, la('2026-11-07', '08:00')));
   await B.sync.syncNow();
   assert.equal(server.count(B.client.userId), 1);
+});
+
+test('first sync backfills entries that predate sync, but not untouched seed rows', async () => {
+  const server = createFakeSupabase();
+  const A = await device(server);
+  // Data written before sync existed: straight to the store, nothing queued.
+  const d = dose('med-oxycodone-5', 5, 1, la('2026-11-07', '04:55'));
+  await A.store.put('events', d);
+  await A.store.put('meta', { key: 'activation', activated_at: '2026-11-06T06:00:00.000Z' });
+  await A.store.put('slot_states', { slot_id: 'ice:ice:2026-11-07:09:00', status: 'skipped', at: '2026-11-07T17:00:00.000Z' });
+  const q = (await A.store.getAll('questions')).find((x) => x.id === 'pt-start');
+  await A.store.put('questions', { ...q, status: 'resolved', resolution: { value: 'week 1', confirmed_by: 'Surgeon', confirmed_on: '2026-11-07' } });
+  assert.equal(await A.store.count('outbox'), 0);
+  await signIn(A);
+  const uploaded = server.count(A.client.userId);
+  assert.equal(uploaded, 4, 'event + activation + slot state + resolved question; untouched seed orders/questions/milestones/contacts skipped');
+  const stores = new Set([...server.rows.values()].map((r) => r.store));
+  assert.deepEqual([...stores].sort(), ['events', 'meta', 'questions', 'slot_states']);
+  // backfill runs once; a later sync does not re-queue everything
+  const r = await A.sync.syncNow();
+  assert.equal(r.pushed, 0);
+  // a second device receives the backfilled history
+  const B = await device(server);
+  await signIn(B);
+  assert.ok(await B.store.get('events', d.id));
+  assert.equal((await B.store.get('questions', 'pt-start')).status, 'resolved');
 });

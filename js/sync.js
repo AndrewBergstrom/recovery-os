@@ -235,7 +235,7 @@ export function createSupabaseClient({ url = '', anonKey = '', fetchImpl = typeo
 
 // ---------- Sync engine ----------
 
-export function createSync({ store, client, onStatus = () => {}, onChange = () => {}, now = Date.now, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false) }) {
+export function createSync({ store, client, seedDocs = () => [], onStatus = () => {}, onChange = () => {}, now = Date.now, online = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false) }) {
   const status = { configured: !!client?.configured, signedIn: !!client?.session, email: client?.email || null, syncing: false, pending: 0, lastSyncAt: null, lastError: null, online: online() };
   let running = false;
   let queued = false;
@@ -280,6 +280,32 @@ export function createSync({ store, client, onStatus = () => {}, onChange = () =
       const current = await store.get('outbox', e.id);
       if (current && current.queued_at === e.queued_at) await store.delete('outbox', e.id);
     }
+    return entries.length;
+  }
+
+  /**
+   * One-time per device: queue every local document that predates sync (or was written
+   * while signed out before the outbox existed). Untouched seed rows are skipped — they are
+   * deterministic on every device and uploading them could reopen a version another device closed.
+   */
+  async function backfill() {
+    const meta = (await store.get('meta', 'sync')) || { key: 'sync' };
+    if (meta.backfilled_at) return 0;
+    const seeds = new Map((typeof seedDocs === 'function' ? seedDocs() : seedDocs).map((i) => [`${i.store}:${docKey(i.store, i.obj)}`, i.obj]));
+    const pending = new Set((await store.getAll('outbox')).map((e) => e.id));
+    const entries = [];
+    for (const storeName of SYNCED_STORES) {
+      for (const doc of await store.getAll(storeName)) {
+        if (!shouldSync(storeName, doc)) continue;
+        const id = `${storeName}:${docKey(storeName, doc)}`;
+        if (pending.has(id)) continue;
+        const seed = seeds.get(id);
+        if (seed && same(seed, doc)) continue;
+        entries.push({ store: 'outbox', obj: outboxEntry(storeName, doc, { now: now() }) });
+      }
+    }
+    if (entries.length) await store.bulkPut(entries);
+    await store.put('meta', { ...meta, key: 'sync', backfilled_at: new Date(now()).toISOString(), backfilled: entries.length });
     return entries.length;
   }
 
@@ -335,6 +361,7 @@ export function createSync({ store, client, onStatus = () => {}, onChange = () =
     emit();
     try {
       await client.ensureFreshToken();
+      await backfill();
       let applied = await pull();
       const pushed = await push();
       if (pushed) applied += await pull();
@@ -405,5 +432,5 @@ export function createSync({ store, client, onStatus = () => {}, onChange = () =
   }
 
   refreshPending().then(emit);
-  return { status, enqueue, enqueueMany, syncNow, start, stop, afterSignIn, signOut, resetCursor, client };
+  return { status, enqueue, enqueueMany, syncNow, start, stop, afterSignIn, signOut, resetCursor, backfill, client };
 }
