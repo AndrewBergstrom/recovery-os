@@ -2,17 +2,20 @@
 // implementation (RFC 8291 aes128gcm decryption + RFC 8292 VAPID JWT verification).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-
-const vapid = JSON.parse(readFileSync(new URL('../../.vapid.json', import.meta.url)));
-process.env.VAPID_PUBLIC_KEY = vapid.VAPID_PUBLIC_KEY;
-process.env.VAPID_PRIVATE_KEY = vapid.VAPID_PRIVATE_KEY;
-process.env.VAPID_SUBJECT = 'mailto:test@example.com';
-const { encrypt, vapidAuthorization } = await import('../supabase/functions/reminders/webpush.ts');
+import { encrypt, vapidAuthorization } from '../supabase/functions/reminders/webpush.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const b64u = (b) => Buffer.from(b).toString('base64url');
+
+// A throwaway VAPID keypair in the same shape the Edge Function secrets use
+// (raw uncompressed public point + JWK "d"), so the test needs no key file.
+const vapid = await (async () => {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+  const jwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  const pub = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+  return { VAPID_PUBLIC_KEY: b64u(pub), VAPID_PRIVATE_KEY: jwk.d };
+})();
 const concat = (...parts) => Buffer.concat(parts.map((p) => Buffer.from(p)));
 async function hkdf(salt, ikm, info, length) {
   const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
