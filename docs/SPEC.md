@@ -1,6 +1,6 @@
 # Recovery OS — Personal Knee Surgery Recovery Tracker
 
-**Version:** 1.0 — build specification  
+**Version:** 1.1 — build specification, with an as-built addendum (§13) dated 2026-11-07  
 **Owner:** Single patient  
 **Starting event:** Left knee surgery, November 6, 2026  
 **Time zone:** `America/Los_Angeles`  
@@ -339,3 +339,19 @@ Private encrypted synchronization, caregiver mode, photo attachments stored only
 ## 12. First implementation task for the coding agent
 
 > Implement **Phase 1 only** with complete files (not diffs). Create the static HTML/CSS/JavaScript structure, IndexedDB persistence, sample non-personal data, a working Today view, a Quick Log confirmation flow, export/import JSON, and `AGENTS.md`. Use the visual tokens in this document. Do not introduce a backend, account system, analytics, external libraries, or invented clinical guidance. Preserve all unresolved medical instructions as pending until clinician confirmation. Provide local run instructions and tests. Stop after Phase 1 so the patient can review the UI before medication behavior is implemented.
+
+## 13. As built — status on 2026-11-07 (Day 1)
+
+This section records where the shipped app differs from, or goes beyond, §§1–12. The sections above are left as written so the original intent stays reviewable; the README's *Implementation choices* table carries the defaults chosen for anything the spec left open.
+
+**Phases.** Phase 1 is complete. Pulled forward at the patient's request: the Phase 2 medication guardrails (rolling 24 h acetaminophen warning, duplicate warning, aspirin–ibuprofen notice), PRN handling with a predicted *earliest next* dose, confirmed schedules as order versions; the Phase 3 exercise clearance gate, *Start now* session timer (a timer is never completion), ice/elevation tracker, check-in, milestones, visit summary; the Phase 4 low-energy mode, installable PWA and DST tests; and from Phase 5, synchronization and caregiver mode (below). Not built: PDF report, photo attachments, encrypted exports, AI summaries.
+
+**Main screen.** The Today view became a calendar: a *Still to do today* panel (meds by medicine, as-needed windows, one chip per exercise session, ice, check-in, visits), a day strip on phones and a Morning/Afternoon/Evening week grid on wide screens, and pills per planned item that only change colour because an entry exists (green done · amber in progress or partly done · red not recorded after a grace window · indigo due · grey upcoming/optional). All cleared exercises at one routine time are one *Exercises* pill with progress; tapping it lists the session. Surgery day is never red and counts nothing. Pills without a status colour carry a kind-tinted icon so columns can be scanned without reading.
+
+**Exercises.** Every seeded exercise has an original start → finish line diagram and plain-language steps (`js/exercise-guides.js`), shown on the Movement card, in the calendar's exercise sheet and inside the record form. Guides never add reps, sets, holds, ranges or exercises; a test enforces it.
+
+**Sync, care partners, reminders (deviation from §Technical constraints "no backend / no sign-in").** Added 2026-11-07 at the patient's explicit request, opt-in, and the app must keep working with none of it configured: an outbox-based offline-first sync to a row-level-secured `records` table in the patient's own Supabase project (link/code email sign-in; append-only entries never conflict, everything else last-write-wins by `updated_at`, enforced by a trigger); care partners joined by single-use invite link (anonymous auth bound to their device; owner can revoke/remove; RLS checks membership on every row); and push reminders from an Edge Function on a 5-minute cron that reuses `js/reminders-due.js` so what it sends matches the pills (partners also get a "not logged yet" nudge after the grace window; revoked partners are dropped from fan-out). Still no analytics, no dependencies, no inline scripts/styles; the CSP allows `connect-src` to the Supabase host only.
+
+**Paperwork discrepancies (§3).** All five were recorded as answered by the patient on 2026-11-07 (surgeon's post-op instructions and scheduling calls): toe-touch weight-bearing 2 weeks; PT start Mon Nov 9 at HiDEF; brace locked for walking; aspirin + ibuprofen together; first clinic visit Nov 19. The brace question for sitting/sleeping/showering is still open and listed under *Your questions for the visit*. The four exercises were marked cleared from the surgeon's discharge sheet (2026-11-06). The aspirin schedule was confirmed from the label as 8:00 AM / 8:00 PM, Nov 6 → Dec 18.
+
+**Reminder policy (§Security rules "avoid promising reliable background reminders").** Reminders are pushes from the server, not timers in the page; the app says so, requires the Home Screen install on iPhone, and never records anything from a notification.

@@ -1,6 +1,8 @@
 # AGENTS.md — Recovery OS development instructions
 
-Read `RECOVERY_TRACKER_SPEC.md` before making changes. Implement the app in phases; complete Phase 1 first and do not jump ahead without explicit authorization.
+Read `SPEC.md` (this folder; the build plan called it `RECOVERY_TRACKER_SPEC.md`) before making changes, including its as-built addendum (§13). Implement the app in phases; do not jump ahead of what the patient has authorized. The repo-root `AGENTS.md` lists the current quick checks.
+
+> **Amended 2026-11-07.** The constraint below that forbids a backend or sign-in was relaxed by the patient for one purpose: optional, opt-in sync / care-partner access / push reminders through a Supabase project the patient owns (`js/sync.js`, `js/push.js`, `supabase/`). Everything else in this file stands, and the app must keep working with none of that configured.
 
 ## Mission
 Build a mobile-first, ADHD-friendly static knee-surgery recovery tracker. Optimize for one obvious next action, accurate medication/event tracking, easy corrections, and safe export. Use clean, accessible visual design.
@@ -8,7 +10,7 @@ Build a mobile-first, ADHD-friendly static knee-surgery recovery tracker. Optimi
 ## Technical constraints
 - Static `index.html`, CSS and modular vanilla JavaScript; offline-ready progressive web app.
 - IndexedDB is the on-device event store. JSON export is the canonical interchange format; Markdown is for documentation and summaries.
-- Do not introduce a backend, sign-in, third-party tracking, remote fonts, or unnecessary dependencies.
+- Do not introduce a backend, sign-in, third-party tracking, remote fonts, or unnecessary dependencies. (Amended: the optional Supabase sync/care-partner/reminder feature is the one sanctioned exception — plain `fetch`, no SDK, opt-in.)
 - Write complete updated files when supplying code, not partial diffs.
 - Support iPhone Safari, semantic accessibility, reduced motion, and one-handed mobile operation.
 
@@ -25,7 +27,7 @@ Build a mobile-first, ADHD-friendly static knee-surgery recovery tracker. Optimi
 ## Security rules
 - Never commit personal medical records or actual usage logs into publicly served assets or source control.
 - Treat Markdown/JSON imports as untrusted; validate schema, escape text, preview differences, require consent.
-- Avoid promising reliable background reminders from a static web page.
+- Avoid promising reliable background reminders from a static web page. (Push reminders exist only when the patient has set up the Edge Function and allowed notifications on a device; the page itself never claims to ring while closed.)
 - Provide a clear, user-controlled backup and restore workflow.
 
 ## UX rules
