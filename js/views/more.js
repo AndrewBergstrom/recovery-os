@@ -8,11 +8,13 @@ import { PRODUCT_BOUNDARY } from '../safety-rules.js';
 import { SEED_VERSION } from '../seed.js';
 import { isSample } from '../sample-data.js';
 import { kv } from './shared.js';
+import { syncCard } from './sync-ui.js';
 
 export function renderMore(ctx) {
   const { state, actions } = ctx;
   const view = el('section', { class: 'view' });
   view.append(el('h1', { text: 'Settings & backup' }));
+  view.append(syncCard(ctx));
 
   // Display
   const textSize = segmented(TEXT_SIZES.map((s) => ({ id: s, label: { small: 'Small', default: 'Default', large: 'Large', xl: 'Extra large' }[s] })), state.prefs.textSize, (v) => actions.setPref('textSize', v), { label: 'Text size' });
@@ -87,7 +89,7 @@ export function renderMore(ctx) {
         button(`Remove sample entries${sampleCount ? ` (${sampleCount})` : ''}`, { disabled: !sampleCount, onClick: () => actions.removeSample() })
       ),
       el('div', { class: 'btn-row' }, button('Erase all local data', { variant: 'danger-soft', onClick: () => actions.eraseAll() })),
-      el('p', { class: 'muted small', text: 'Erasing removes everything on this device: orders, entries, questions, appointments and contacts. Export first.' })
+      el('p', { class: 'muted small', text: 'Erasing removes everything on this device: orders, entries, questions, appointments and contacts. Export first. If sync is signed in, the cloud copy syncs back.' })
     )
   );
 

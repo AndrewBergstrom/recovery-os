@@ -3,9 +3,9 @@
 // fallback when IndexedDB is unavailable (the UI warns that data will not persist).
 
 export const DB_NAME = 'recovery-os';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
-export const STORE_NAMES = ['events', 'orders', 'questions', 'milestones', 'appointments', 'contacts', 'meta', 'slot_states'];
+export const STORE_NAMES = ['events', 'orders', 'questions', 'milestones', 'appointments', 'contacts', 'meta', 'slot_states', 'outbox'];
 
 export const KEY_PATHS = {
   events: 'id',
@@ -16,6 +16,7 @@ export const KEY_PATHS = {
   contacts: 'id',
   meta: 'key',
   slot_states: 'slot_id', // calendar pill state: in_progress / skipped
+  outbox: 'id', // pending sync writes: `${store}:${key}`
 };
 
 /** Ordered migrations. Each runs inside the upgrade transaction. */
@@ -35,6 +36,12 @@ export const MIGRATIONS = [
     version: 2,
     up(db) {
       if (!db.objectStoreNames.contains('slot_states')) db.createObjectStore('slot_states', { keyPath: 'slot_id' });
+    },
+  },
+  {
+    version: 3,
+    up(db) {
+      if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'id' });
     },
   },
 ];

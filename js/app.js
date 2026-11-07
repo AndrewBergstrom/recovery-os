@@ -1,6 +1,9 @@
 // app.js — boot, state, routing and the actions views call. No frameworks.
 
-import { openStore, deleteDatabase } from './db.js';
+import { openStore, KEY_PATHS } from './db.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { createSupabaseClient, createSync } from './sync.js';
+import { readLocalConfig, openSignInSheet, openSyncConfigSheet, syncCard, renderSyncDot } from './views/sync-ui.js';
 import { loadPrefs, savePrefs, applyPrefs, markHadData, hadData, clearHadData } from './prefs.js';
 import { seedItems, SEED_VERSION, orderKey } from './seed.js';
 import { el, icon, toast, closeAllSheets, confirmDialog, openSheet, button, field } from './ui.js';
@@ -20,7 +23,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.2.1';
+export const APP_VERSION = '0.3.0';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -46,9 +49,11 @@ const state = {
   storeVolatile: false,
   dataLossSuspected: false,
   swStatus: 'unsupported',
+  sync: { configured: false, signedIn: false },
 };
 let store = null;
-let onboarding = false;
+let sync = null;
+let onboardingForced = false;
 
 const ctx = {
   state,
@@ -78,7 +83,31 @@ async function loadState() {
 async function ensureSeed() {
   const seed = await store.get('meta', 'seed');
   if (seed && seed.version >= SEED_VERSION) return;
-  await store.bulkPut(seedItems(toIso(nowMs())));
+  await store.bulkPut(seedItems(toIso(nowMs()))); // seed rows are deterministic and never queued for sync
+}
+
+// Every write goes to the device first, then to the sync outbox (a no-op until sync is configured).
+function stamped(storeName, obj) {
+  return storeName === 'events' ? obj : { ...obj, updated_at: toIso(nowMs()) };
+}
+async function persist(storeName, obj) {
+  const doc = stamped(storeName, obj);
+  await store.put(storeName, doc);
+  await sync.enqueue(storeName, doc);
+  return doc;
+}
+async function persistMany(items) {
+  const docs = items.map((i) => ({ store: i.store, obj: stamped(i.store, i.obj) }));
+  await store.bulkPut(docs);
+  await sync.enqueueMany(docs);
+}
+async function remove(storeName, key) {
+  await store.delete(storeName, key);
+  await sync.enqueue(storeName, { [KEY_PATHS[storeName]]: key }, { deleted: true });
+}
+function refreshSyncCard() {
+  const old = document.getElementById('sync-card');
+  if (old) old.replaceWith(syncCard(ctx));
 }
 
 // ---------- Rendering ----------
@@ -111,10 +140,9 @@ function render() {
   renderHeader();
   renderNav();
   main.setAttribute('aria-busy', 'false');
-  if (onboarding || !state.meta.activation) {
-    onboarding = true;
+  if (onboardingForced || !state.meta.activation) {
     document.getElementById('app-nav').classList.add('hidden');
-    main.replaceChildren(renderOnboarding(ctx, { onDone: activate }));
+    main.replaceChildren(renderOnboarding(ctx, { onDone: activate, onSignIn: state.sync.configured && !state.sync.signedIn ? () => ctx.actions.openSignIn() : null }));
     return;
   }
   document.getElementById('app-nav').classList.remove('hidden');
@@ -128,8 +156,8 @@ async function refresh() {
 }
 
 async function activate() {
-  await store.put('meta', { key: 'activation', activated_at: toIso(nowMs()), reviewed_seed_version: SEED_VERSION, app_version: APP_VERSION });
-  onboarding = false;
+  await persist('meta', { key: 'activation', activated_at: toIso(nowMs()), reviewed_seed_version: SEED_VERSION, app_version: APP_VERSION });
+  onboardingForced = false;
   state.dataLossSuspected = false;
   markHadData();
   await refresh();
@@ -150,9 +178,49 @@ Object.assign(ctx.actions, {
     return openProfileEditor(ctx);
   },
   openOnboarding() {
-    onboarding = true;
+    onboardingForced = true;
     closeAllSheets();
     render();
+  },
+  openSignIn() {
+    return openSignInSheet(ctx, {
+      onSignedIn: async () => {
+        await loadState();
+        if (state.meta.activation) onboardingForced = false;
+        state.dataLossSuspected = false;
+        render();
+        sync.start();
+      },
+    });
+  },
+  openSyncConfig() {
+    return openSyncConfigSheet(ctx);
+  },
+  async syncNow() {
+    const r = await sync.syncNow({ reason: 'manual' });
+    if (r?.error) toast(`Sync failed: ${r.error}`);
+    else if (r?.skipped) toast(`Sync skipped: ${r.skipped}`);
+    else toast(r.applied || r.pushed ? `Synced · ${r.pushed || 0} pushed, ${r.applied || 0} applied` : 'Already up to date');
+    refreshSyncCard();
+  },
+  async signOut() {
+    const ok = await confirmDialog({ title: 'Sign out of sync?', message: 'Entries stay on this device. New entries queue here and push the next time you sign in.', confirmText: 'Sign out' });
+    if (!ok) return;
+    await sync.signOut();
+    refreshSyncCard();
+    toast('Signed out');
+  },
+  async deleteCloud() {
+    const ok = await confirmDialog({ title: 'Delete all cloud data?', message: 'Removes every row for this account from your Supabase project. This device keeps its local copy. Other devices still signed in will push their copies back up unless you sign them out first.', confirmText: 'Delete cloud data', danger: true });
+    if (!ok) return;
+    try {
+      await sync.client.deleteAll();
+      await sync.resetCursor();
+      toast('Cloud data deleted');
+    } catch (e) {
+      toast(`Could not delete: ${e.message}`);
+    }
+    refreshSyncCard();
   },
   openRoutine() {
     return openRoutineSheet(ctx);
@@ -163,18 +231,18 @@ Object.assign(ctx.actions, {
     window.scrollTo({ top: y });
   },
   async setSlotState(s) {
-    await store.put('slot_states', s);
+    await persist('slot_states', s);
     await refresh();
   },
   async clearSlotState(slotId) {
-    await store.delete('slot_states', slotId);
+    await remove('slot_states', slotId);
     await refresh();
   },
   async addEvent(ev, { toastText } = {}) {
     const problems = validateEvent(ev);
     if (problems.length) throw new Error(problems.join(' '));
-    await store.put('events', ev);
-    if (ev.slot_id) await store.delete('slot_states', ev.slot_id); // a recorded entry ends any in-progress/skipped state
+    await persist('events', ev);
+    if (ev.slot_id && (await store.get('slot_states', ev.slot_id))) await remove('slot_states', ev.slot_id); // a recorded entry ends any in-progress/skipped state
     if (!isSample(ev)) markHadData();
     await refresh();
     if (toastText) toast(toastText);
@@ -182,7 +250,7 @@ Object.assign(ctx.actions, {
   async putOrderVersion(newVersion, previous) {
     newVersion.key = orderKey(newVersion);
     previous.key = orderKey(previous);
-    await store.bulkPut([
+    await persistMany([
       { store: 'orders', obj: previous },
       { store: 'orders', obj: newVersion },
     ]);
@@ -190,33 +258,33 @@ Object.assign(ctx.actions, {
     toast(newVersion.type === 'exercise' ? `${newVersion.name}: clearance recorded` : `${newVersion.name}: schedule saved as version ${newVersion.version}`);
   },
   async resolveQuestion(q, resolution) {
-    await store.put('questions', { ...q, status: 'resolved', resolution: { ...resolution, recorded_at: toIso(nowMs()) } });
+    await persist('questions', { ...q, status: 'resolved', resolution: { ...resolution, recorded_at: toIso(nowMs()) } });
     await refresh();
     toast('Answer recorded');
   },
   async reopenQuestion(q) {
     const ok = await confirmDialog({ title: 'Reopen this question?', message: 'It will show as “needs confirmation” again. The recorded answer stays in history.', confirmText: 'Reopen' });
     if (!ok) return;
-    await store.put('questions', { ...q, status: 'needs_clinician_confirmation', previous_resolution: q.resolution, resolution: null });
+    await persist('questions', { ...q, status: 'needs_clinician_confirmation', previous_resolution: q.resolution, resolution: null });
     await refresh();
   },
   async putMilestone(m) {
-    await store.put('milestones', m);
+    await persist('milestones', m);
     await refresh();
     toast('Milestone updated');
   },
   async putAppointment(a) {
-    await store.put('appointments', a);
+    await persist('appointments', a);
     await refresh();
     toast('Appointment saved');
   },
   async putContact(c) {
-    await store.put('contacts', c);
+    await persist('contacts', c);
     await refresh();
     toast('Contact saved');
   },
   async putMeta(obj) {
-    await store.put('meta', obj);
+    await persist('meta', obj);
     await refresh();
     toast('Saved');
   },
@@ -264,7 +332,7 @@ Object.assign(ctx.actions, {
     const data = buildExport(state, { nowIso: toIso(nowMs()), appVersion: APP_VERSION });
     const text = JSON.stringify(data, null, 2);
     const stamp = data.exported_at.replace(/[:.]/g, '-');
-    await store.put('meta', { key: 'last_export', at: data.exported_at, events: state.events.length });
+    await persist('meta', { key: 'last_export', at: data.exported_at, events: state.events.length });
     await loadState();
     openTextExportSheet({ title: 'JSON backup', filename: `recovery-os-backup-${stamp}.json`, text, note: `${state.events.length} entries, ${state.orders.length} order versions, ${state.questions.length} questions. Keep this file private — it is your medical record.` });
   },
@@ -284,28 +352,32 @@ Object.assign(ctx.actions, {
     const ok = await confirmDialog({ title: 'Load sample entries?', message: 'Adds a few clearly-labelled demo entries (ice, a check-in, a note). No medication doses. You can remove them any time.', confirmText: 'Load samples' });
     if (!ok) return;
     const items = sampleEvents({ nowMs: nowMs(), tz: state.profile.timezone || DEFAULT_TZ }).map((obj) => ({ store: 'events', obj }));
-    await store.bulkPut(items);
+    await persistMany(items);
     await refresh();
     toast('Sample entries loaded (labelled “sample”)');
   },
   async removeSample() {
     const samples = state.events.filter(isSample);
-    for (const s of samples) await store.delete('events', s.id);
+    for (const s of samples) await remove('events', s.id);
     await refresh();
     toast('Sample entries removed');
   },
   async eraseAll() {
-    const first = await confirmDialog({ title: 'Erase all local data?', message: 'This deletes every order, entry, question, appointment and contact stored on this device. Export a backup first if you have not.', confirmText: 'Continue', danger: true });
+    const signedIn = !!state.sync.signedIn;
+    const first = await confirmDialog({ title: 'Erase all local data?', message: signedIn ? 'This deletes everything stored on this device. Your cloud copy stays and will sync straight back while you are signed in — sign out first (or delete the cloud data) if you want a clean start.' : 'This deletes every order, entry, question, appointment and contact stored on this device. Export a backup first if you have not.', confirmText: 'Continue', danger: true });
     if (!first) return;
-    const second = await confirmDialog({ title: 'Really erase everything?', message: 'This cannot be undone. The app will restart with the care-plan seed and no entries.', confirmText: 'Yes, erase', danger: true });
+    const second = await confirmDialog({ title: 'Really erase everything on this device?', message: 'This cannot be undone here. The app will restart with the care-plan seed and no entries.', confirmText: 'Yes, erase', danger: true });
     if (!second) return;
+    sync.stop();
     await store.clear();
     clearHadData();
     state.dataLossSuspected = false;
-    onboarding = true;
+    onboardingForced = false;
     await ensureSeed();
+    await sync.resetCursor();
     await refresh();
     toast('Local data erased');
+    if (signedIn) sync.start();
   },
 });
 
@@ -360,6 +432,7 @@ function openImportSheet() {
     if (!pending) return;
     try {
       const r = await applyImport(store, pending);
+      if (r.items?.length) await sync.enqueueMany(r.items);
       markHadData();
       state.dataLossSuspected = false;
       await refresh();
@@ -378,6 +451,14 @@ function openImportSheet() {
       result
     )
   );
+}
+
+function safeStorage() {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- Boot ----------
@@ -410,13 +491,32 @@ async function boot() {
   try {
     store = await openStore();
     state.storeVolatile = !!store.volatile;
+    const localCfg = readLocalConfig();
+    const client = createSupabaseClient({ url: localCfg?.url || SUPABASE_URL, anonKey: localCfg?.anonKey || SUPABASE_ANON_KEY, storage: safeStorage() });
+    sync = createSync({
+      store,
+      client,
+      onStatus: (st) => {
+        state.sync = st;
+        renderSyncDot(st);
+        if (currentRoute() === 'more' && !document.querySelector('.sheet-wrap')) refreshSyncCard();
+      },
+      onChange: async ({ applied }) => {
+        await loadState();
+        if (state.meta.activation) onboardingForced = false;
+        state.dataLossSuspected = false;
+        if (!document.querySelector('.sheet-wrap')) ctx.actions.quietRender();
+        toast(`Synced ${applied} change${applied === 1 ? '' : 's'} from your other device`);
+      },
+    });
+    ctx.sync = sync;
     await ensureSeed();
     await loadState();
     const activation = state.meta.activation;
     if (!activation && hadData() && state.events.length === 0) state.dataLossSuspected = true;
     if (state.dataLossSuspected) {
-      // Show Today with the data-loss panel instead of onboarding, so the person can restore first.
-      await store.put('meta', { key: 'activation', activated_at: toIso(nowMs()), reviewed_seed_version: SEED_VERSION, app_version: APP_VERSION, note: 'auto-activated after suspected data loss; seed not re-reviewed' });
+      // Show the calendar with the data-loss panel instead of the setup flow, so the person can restore first.
+      await persist('meta', { key: 'activation', activated_at: toIso(nowMs()), reviewed_seed_version: SEED_VERSION, app_version: APP_VERSION, note: 'auto-activated after suspected data loss; seed not re-reviewed' });
       await loadState();
     }
   } catch (e) {
@@ -431,10 +531,12 @@ async function boot() {
   });
   render();
   registerServiceWorker();
+  renderSyncDot(state.sync);
+  sync.start();
   // Keep "next dose" and the day count current: when the app returns to the
   // foreground, and every few minutes on Today. Never while a sheet is open.
   const quietRender = () => {
-    if (document.querySelector('.sheet-wrap') || onboarding) return;
+    if (document.querySelector('.sheet-wrap') || onboardingForced || !state.meta.activation) return;
     ctx.actions.quietRender();
   };
   document.addEventListener('visibilitychange', () => {

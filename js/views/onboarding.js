@@ -10,7 +10,7 @@ import { PRODUCT_BOUNDARY } from '../safety-rules.js';
 import { statusChipFor } from './shared.js';
 import { milestoneDate } from './plan.js';
 
-export function renderOnboarding(ctx, { onDone }) {
+export function renderOnboarding(ctx, { onDone, onSignIn = null }) {
   const { state, actions } = ctx;
   let step = 0;
   const root = el('section', { class: 'view onboarding' });
@@ -41,7 +41,8 @@ export function renderOnboarding(ctx, { onDone }) {
           el('li', { text: 'Where your paperwork disagrees with itself, the app shows “needs confirmation” until a clinician settles it.' })
         )
       ),
-      nav({ showBack: false })
+      nav({ showBack: false }),
+      onSignIn ? el('div', { class: 'card' }, el('h2', { class: 'card-title', text: 'Already using Recovery OS on another device?' }), el('p', { class: 'muted small', text: 'Sign in and your care plan, entries and settings sync down — no need to review the seed again.' }), el('div', { class: 'card-actions' }, button('Sign in to sync', { onClick: onSignIn }))) : null
     );
   }
 

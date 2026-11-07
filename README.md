@@ -24,7 +24,7 @@ Or `npx serve .` — anything that serves the folder as-is.
 node --test tests/*.test.js      # Node 20+ (uses node:test, no packages)
 ```
 
-44 tests cover: calendar slots and their statuses (upcoming → due → red; PRN never a slot; uncleared exercises never a slot; loose entries attach to the nearest slot); no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
+54 tests cover: sync (two devices exchanging entries, order versions, tombstones; last-write-wins; erase-and-restore; token refresh) via an in-memory stand-in for Supabase; calendar slots and their statuses (upcoming → due → red; PRN never a slot; uncleared exercises never a slot; loose entries attach to the nearest slot); no fabricated events in the seed; cancel stores nothing; a stored dose round-trips exactly; corrections supersede but preserve originals; the acetaminophen total is a **rolling 24 h** window across midnight and both 2026 DST transitions; PRN medicines are never due; uncleared exercises are never due; day 14 never auto-advances weight-bearing; export → import into a clean store keeps every entry; malformed or conflicting backups never partially overwrite.
 
 ## Deploy (GitHub Pages)
 
@@ -47,6 +47,10 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: bl
 - **As-needed** medicines sit in their own row: tap to log, shows today's count and last time. Never due, never red.
 - Times come from the **Daily routine** in Settings (ice 4×/day, check-in, exercise sessions, aspirin placeholders). They place pills only; they never change an order.
 - *I feel overwhelmed* collapses the screen to the single next pill.
+
+## Cross-device sync (optional, Supabase)
+
+Off by default. When configured, the app stays offline-first: every write lands in IndexedDB, then in an outbox that pushes to a single row-level-secured `records` table in **your own** Supabase project; other signed-in devices pull on open, on foreground and about once a minute. Sign-in is an emailed 6-digit code (no password, no redirect — it works inside the installed PWA). Entries are append-only and never conflict; everything else is last-write-wins by `updated_at`, enforced by a server trigger. Setup: [`supabase/README.md`](supabase/README.md) (schema in [`supabase/schema.sql`](supabase/schema.sql); keys in [`js/config.js`](js/config.js) or Settings → Sync). No SDK — a few `fetch` calls, so the strict CSP and zero-dependency rule still hold.
 
 ## What Phase 1 includes
 
@@ -87,12 +91,13 @@ default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: bl
 ```
 index.html  styles.css  manifest.webmanifest  sw.js  package.json
 icons/            PNG icons (generated, abstract mark)
-js/               app.js db.js events.js schedule.js medications.js exercises.js safety-rules.js
-                  reminders.js export-import.js time.js ui.js prefs.js seed.js sample-data.js
-js/views/         calendar medications movement progress plan more onboarding quick-log shared
+js/               app.js db.js events.js schedule.js sync.js config.js medications.js exercises.js
+                  safety-rules.js reminders.js export-import.js time.js ui.js prefs.js seed.js sample-data.js
+js/views/         calendar medications movement progress plan more onboarding quick-log shared sync-ui
+supabase/         schema.sql  README.md (optional cross-device sync)
 docs/             SPEC.md  AGENTS.md  care-plan-template.md
 schemas/          recovery-export.schema.json
-tests/            event-log meds safety schedule export-import time (node:test)
+tests/            event-log meds safety schedule sync export-import time (node:test; fake-supabase.js stand-in)
 .github/workflows/pages.yml
 ```
 
@@ -101,5 +106,5 @@ tests/            event-log meds safety schedule export-import time (node:test)
 - No in-app scheduled reminders yet (Phase 2). The app never claims to ring while closed.
 - No timer in exercise sessions (Phase 3); sessions are recorded after the fact.
 - No encryption of exports (Phase 5); keep backups private.
-- No cross-device sync by design; move data with export/import.
+- Cross-device sync is optional and needs your own Supabase project; without it, move data with export/import.
 - Browser storage can still be evicted. The JSON export is the real backup.

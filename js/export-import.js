@@ -159,9 +159,9 @@ export async function applyImport(store, diff) {
   for (const s of Object.values(diff.sections)) for (const obj of s.new) items.push({ store: s.store, obj });
   if (diff.profile.status === 'adopt') items.push({ store: 'meta', obj: { ...diff.profile.incoming, key: 'profile' } });
   if (diff.activation.status === 'adopt') items.push({ store: 'meta', obj: { ...diff.activation.incoming, key: 'activation' } });
-  if (!items.length) return { written: 0 };
+  if (!items.length) return { written: 0, items: [] };
   await store.bulkPut(items);
-  return { written: items.length };
+  return { written: items.length, items };
 }
 
 export function parseBackupText(text) {

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co https://*.supabase.in; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="theme-color" content="#3D5675">
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="Recovery OS — a personal, local-only knee-surgery recovery tracker. Organizes your own entries; does not give medical advice.">
@@ -40,7 +40,7 @@
   <div class="app" id="app">
     <header class="app-header" id="app-header">
       <div class="brand"><span class="brand-name">Recovery OS</span><span class="brand-day" id="brand-day"></span></div>
-      <a class="btn btn-ghost btn-icon" href="#more" aria-label="Settings and backup" id="more-link"></a>
+      <div class="header-actions"><a class="sync-dot hidden" id="sync-dot" href="#more" role="status"></a><a class="btn btn-ghost btn-icon" href="#more" aria-label="Settings and backup" id="more-link"></a></div>
     </header>
     <main id="main" class="app-main" tabindex="-1" aria-live="polite" aria-busy="true">
       <p class="muted">Loading your recovery tracker…</p>

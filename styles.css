@@ -514,3 +514,12 @@ html[data-theme="dark"] { --c-done: #7fc79c; --c-progress: #e0b65a; --c-todo: #e
 .ring-placeholder { width: 18px; height: 18px; margin-top: 2px; }
 .cal-note { display: flex; gap: 8px; align-items: flex-start; color: var(--muted); font-size: 0.9rem; }
 .low-energy-card { gap: 14px; }
+
+/* ---------- Sync indicator ---------- */
+.header-actions { display: flex; align-items: center; gap: 4px; }
+.sync-dot { width: 12px; height: 12px; border-radius: 999px; background: var(--c-neutral); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); display: inline-block; }
+.sync-dot[data-state="ok"] { background: var(--c-done); }
+.sync-dot[data-state="pending"] { background: var(--c-progress); }
+.sync-dot[data-state="syncing"] { background: var(--c-due); }
+.sync-dot[data-state="error"] { background: var(--c-todo); }
+.sync-dot[data-state="offline"], .sync-dot[data-state="off"] { background: var(--c-neutral); }

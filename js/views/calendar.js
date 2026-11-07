@@ -612,6 +612,6 @@ function dataLossPanel(ctx) {
     { class: 'card card-warning', role: 'alert' },
     el('div', { class: 'card-title' }, icon('alert'), ' Your earlier entries aren’t on this device'),
     el('p', { text: 'This browser had Recovery OS entries before, but its storage is now empty — browser data was cleared, or this is a different browser or profile. Your history is not shown as complete; restore it from a backup if you have one.' }),
-    el('div', { class: 'card-actions' }, button('Import backup', { variant: 'primary', onClick: () => actions.openImport() }), button('Start fresh', { onClick: () => actions.dismissDataLoss() }))
+    el('div', { class: 'card-actions' }, button('Import backup', { variant: 'primary', onClick: () => actions.openImport() }), ctx.state.sync?.configured && !ctx.state.sync?.signedIn ? button('Sign in to sync', { onClick: () => actions.openSignIn() }) : null, button('Start fresh', { onClick: () => actions.dismissDataLoss() }))
   );
 }
