@@ -598,3 +598,14 @@ html[data-theme="dark"] { --k-meds: #a9afe8; --k-move: #f0a26b; --k-ice: #7fc4e6
 .ex-guardrail { margin: 0; }
 .ex-params { margin: 0; }
 .ex-guide-compact .ex-art { max-width: 420px; }
+
+/* Static document pages (privacy.html) */
+.doc-body { background: var(--bg); }
+.doc { max-width: 720px; margin: 0 auto; padding: 20px 18px 48px; line-height: 1.55; }
+.doc h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+.doc h2 { font-size: 1.1rem; margin: 26px 0 8px; }
+.doc ul { padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
+.doc a { color: var(--primary); }
+.doc-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin: 8px 0 12px; }
+.doc-table th, .doc-table td { text-align: left; vertical-align: top; padding: 8px 8px; border-bottom: 1px solid var(--border); }
+.doc-table th { color: var(--muted); font-weight: 650; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }

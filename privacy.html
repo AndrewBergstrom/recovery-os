@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto" data-text-size="default" data-motion="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="theme-color" content="#3D5675">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="How Recovery OS handles your information: what is stored, where, who can see it, and why HIPAA does not govern a personal tracker.">
+  <title>Privacy and data handling · Recovery OS</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+</head>
+<body class="doc-body">
+  <main class="doc" id="main">
+    <p class="eyebrow"><a href="./#more">← Back to Recovery OS</a></p>
+    <h1>Privacy and data handling</h1>
+    <p class="muted small">Last updated 2026-11-07. This page describes how the app handles your information. It is not legal advice.</p>
+
+    <h2>The short version</h2>
+    <ul>
+      <li>Recovery OS is a personal tracking tool. <strong>It is not a hospital, clinic, doctor, health plan or insurer, and it does not work on behalf of one.</strong></li>
+      <li>Because of that, <strong>HIPAA does not govern this app.</strong> HIPAA applies to "covered entities" (providers, health plans, clearinghouses) and the contractors that handle data for them. A tool you choose to keep your own records in is neither. Nothing you put in the app changes your clinic's HIPAA duties, and the app never connects to a clinic, a patient portal or an insurer.</li>
+      <li>You are always free to keep and share your own medical information. Entering your own discharge paperwork, medication list or PT schedule into the app breaks no privacy law.</li>
+      <li>"Not covered by HIPAA" is not "no rules." The app is built to the rules that <em>do</em> reach consumer health apps: the FTC Act (truthful privacy practices and reasonable security), the FTC Health Breach Notification Rule, and Washington's My Health My Data Act. What that means in practice is below.</li>
+    </ul>
+
+    <h2>What the app stores, and where</h2>
+    <table class="doc-table">
+      <thead><tr><th>Data</th><th>Where it lives</th><th>Who can see it</th></tr></thead>
+      <tbody>
+        <tr><td>Your entries (doses, sessions, check-ins, notes), your care plan, settings</td><td>Your device, in the browser's local database</td><td>You, on that device</td></tr>
+        <tr><td>The same, if you turn on sync</td><td>A Supabase project <strong>you own</strong>, in a table locked to your account by row-level security</td><td>You, on your signed-in devices, and care partners you invite</td></tr>
+        <tr><td>Care partner access</td><td>A row in your project saying who you invited and when</td><td>You and that partner</td></tr>
+        <tr><td>Reminder subscriptions</td><td>A row per device that asked for reminders</td><td>The reminder function, to deliver pushes</td></tr>
+      </tbody>
+    </table>
+    <p>Nothing is sent anywhere else. There are no analytics, trackers, ad pixels, remote fonts or third-party scripts; the page's Content-Security-Policy forbids them. The public source code contains the care-plan <em>orders</em> transcribed from paperwork and no identifiers.</p>
+
+    <h2>What the app never does</h2>
+    <ul>
+      <li>Never sells, rents or shares your information with anyone you did not invite.</li>
+      <li>Never gives medical advice, diagnoses, or changes an order. It organizes what your clinicians already told you.</li>
+      <li>Never records a dose, session or symptom on its own. Every entry is something you (or a partner you invited) confirmed.</li>
+      <li>Never sends your data to an AI service. (If a document-upload feature is added later, it will ask for a separate, specific opt-in first, delete the uploaded files after extraction, and keep only the plan you confirm.)</li>
+    </ul>
+
+    <h2>Your controls</h2>
+    <ul>
+      <li><strong>Export</strong> everything as JSON or a visit summary at any time (Settings → Backup and export).</li>
+      <li><strong>Delete</strong> every row in the cloud (Settings → Sync → Danger zone) and erase the device copy (Settings → Erase local data).</li>
+      <li><strong>Revoke</strong> a care partner at any time; they lose access immediately.</li>
+      <li><strong>Turn reminders off</strong> per device; the subscription is deleted.</li>
+    </ul>
+
+    <h2>Security</h2>
+    <ul>
+      <li>Access is limited by row-level security on every table: a signed-in account can read and write only its own rows and those of a circle it was invited into.</li>
+      <li>Data is encrypted in transit (TLS) and at rest by the database host.</li>
+      <li>Secrets (push signing keys, the cron secret) live only in the server function's secret store, never in the repository or the browser.</li>
+      <li>The app runs under a strict Content-Security-Policy; no inline scripts, no third-party code.</li>
+    </ul>
+
+    <h2>If something goes wrong</h2>
+    <p>If information were ever accessed or shared without authorization, affected people would be told what happened and what was exposed, and the notices required by the FTC Health Breach Notification Rule and Washington law would be made.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or requests about your data: open an issue on the project repository or email the project owner (address in the repository profile). Requests to see or delete your data are honored; there is nothing to appeal because the answer is yes.</p>
+
+    <p class="footer-note">Recovery OS organizes your own entries. It does not give medical advice, diagnose complications or change orders.</p>
+  </main>
+</body>
+</html>

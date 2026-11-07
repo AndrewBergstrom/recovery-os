@@ -114,6 +114,15 @@ tests/            event-log meds safety schedule sync care-circle webpush guides
 .github/workflows/pages.yml
 ```
 
+## Privacy, HIPAA and the law
+
+Plain-language policy: [`PRIVACY.md`](PRIVACY.md) (served in-app as `privacy.html`, linked from Settings → About).
+
+- **HIPAA does not govern this app.** It applies to covered entities (providers, health plans, clearinghouses) and their business associates; a personal tool a patient keeps their own records in is neither, even when the information came from a hospital. Nothing in the app changes a clinic's obligations, and the app never connects to a clinic, portal or insurer.
+- The rules that *do* reach consumer health apps are the ones it is built to: the FTC Act (truthful privacy practices, reasonable security), the FTC Health Breach Notification Rule, and Washington's My Health My Data Act (consent for collection beyond the requested service, separate consent for sharing, no sale, access/delete/withdraw rights, a policy linked from within the app).
+- Practices that follow: no analytics, trackers or third-party scripts (enforced by CSP); data on the device and, optionally, in a Supabase project the user owns with row-level security; export and delete at any time; care-partner access only by the user's own invite, revocable; secrets never in the repo; no AI processing of user data (a future document-upload feature must get a separate opt-in and discard files after extraction).
+- Before opening the app to the public, have a privacy attorney review `PRIVACY.md` and the consent flow; Washington's law carries a private right of action.
+
 ## Known limitations (Phase 1)
 
 - Reminders need sync + the Edge Function and a device with notifications allowed (on iPhone: installed on the Home Screen). Without them the app never claims to ring while closed.

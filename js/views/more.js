@@ -103,8 +103,10 @@ export function renderMore(ctx) {
       kv([
         ['Version', `${ctx.appVersion} · Phase 1 (foundation)`],
         ['Care-plan seed', `v${SEED_VERSION}${state.meta?.activation ? ` · reviewed ${formatDateStr(state.meta.activation.activated_at.slice(0, 10))}` : ' · not yet reviewed'}`],
-        ['Data', 'Stays on this device. No accounts, analytics, remote fonts or scripts.'],
+        ['Data', state.sync?.signedIn ? 'On this device and in your own Supabase project. No analytics, trackers, ads or third-party scripts.' : 'Stays on this device unless you turn on sync. No analytics, trackers, ads or third-party scripts.'],
+        ['HIPAA', 'Does not apply: this is a personal tool, not a provider, health plan or their contractor. Your clinic\u2019s obligations are unchanged. Built to the rules that do apply to consumer health apps (FTC Act, FTC Health Breach Notification Rule, Washington My Health My Data Act).'],
       ]),
+      el('p', { class: 'small' }, el('a', { href: './privacy.html', text: 'Privacy and data handling' }), ' \u00b7 what is stored, where, who can see it, and how to export or delete it.'),
       el('p', { class: 'small', text: PRODUCT_BOUNDARY }),
       el('div', { class: 'card-actions' }, button('Review the care-plan seed again', { onClick: () => actions.openOnboarding() }))
     )
