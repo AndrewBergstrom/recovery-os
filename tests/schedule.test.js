@@ -162,3 +162,17 @@ test('an unconfirmed aspirin placeholder slides to ~12 h after the dose actually
   const out2 = deriveStatuses(buildDaySlots(early, D, { tz: TZ }), { events: early.events, now: la(D, '06:00'), tz: TZ });
   assert.equal(out2.find((s) => s.id.endsWith(':18:00')).time, '18:00');
 });
+
+test('surgery day: routine slots are optional (never red, not counted); the next day they are required', async () => {
+  const state = baseState({ profile: { ...baseState().profile, surgery_date: '2026-11-06', timezone: TZ } });
+  const surgery = state.profile.surgery_date;
+  const dayAfter = '2026-11-07';
+  const now = la(dayAfter, '15:30');
+  const surgeryDay = deriveStatuses(buildDaySlots(state, surgery, { tz: TZ, now }), { now, tz: TZ });
+  assert.ok(surgeryDay.some((s) => s.kind === 'ice_elevate'), 'ice slots exist on surgery day');
+  assert.ok(surgeryDay.every((s) => s.status !== 'todo' && s.status !== 'due'), 'nothing is red/due on surgery day');
+  assert.equal(dayCompletion(surgeryDay).total, 0);
+  const dayOne = deriveStatuses(buildDaySlots(state, dayAfter, { tz: TZ, now }), { now, tz: TZ });
+  assert.ok(dayOne.some((s) => s.kind === 'ice_elevate' && s.status === 'todo'), 'a missed ice session on day 1 is red');
+  assert.ok(dayCompletion(dayOne).total > 0);
+});

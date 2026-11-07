@@ -146,6 +146,17 @@ export function buildDaySlots(state, dateStr, { tz = DEFAULT_TZ, routine = routi
     if (!Number.isFinite(ms) || localDateString(ms, tz) !== dateStr) continue;
     slots.push({ id: `appt:${a.id}`, kind: 'appointment', ref_id: a.id, date: dateStr, time: localTimeString(ms, tz), at: ms, title: a.title, short: a.title, sub: a.with ? `with ${a.with}` : 'appointment', optional: true, icon: 'plan', appointment: a });
   }
+  // Surgery day: the home routine cannot be expected around the operation itself, so
+  // nothing that day is required — slots stay loggable but never turn red or count.
+  if (dateStr === surgery) {
+    for (const s of slots) {
+      if (['medication', 'ice_elevate', 'exercise', 'checkin'].includes(s.kind) && !s.optional) {
+        s.optional = true;
+        s.surgeryDay = true;
+        s.sub = 'surgery day — only if instructed';
+      }
+    }
+  }
   return slots.sort(timeSort);
 }
 
