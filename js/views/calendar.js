@@ -154,6 +154,22 @@ function glancePanel(ctx, slots, { selected, today }) {
   if (medsLeft.length) panel.append(row('meds', 'Meds', medsLeft.map((s) => chipFor(s, true))));
   else if (medsDone.length) panel.append(row('meds', 'Meds', allDoneNote(medsDone.length === 1 ? 'Scheduled dose' : 'All scheduled doses')));
 
+  // As-needed medicines: every PRN medicine with its earliest-next window, today's count.
+  if (isToday) {
+    const prn = prnPills(state, selected, { tz, now });
+    if (prn.length) {
+      panel.append(row('meds', 'As needed', prn.map((p) => {
+        const pred = p.prediction;
+        const waiting = pred && !pred.available;
+        const b = el('button', { type: 'button', class: `glance-chip pill-${waiting ? 'window' : pred ? 'available' : 'open'}`, 'data-icon': 'meds', 'aria-label': `${p.title}, as needed, ${p.count} today${pred ? (waiting ? `, not before ${formatTime(pred.at, tz)}` : ', available now') : ''}`, onclick: () => openPrnSheet(ctx, p) });
+        b.append(el('span', { class: 'glance-chip-dot', 'aria-hidden': 'true' }));
+        b.append(`${cap(p.short)}${p.count ? ` ×${p.count}` : ''} · ${pred ? (waiting ? `not before ${formatTime(pred.at, tz)}` : 'ok now') : 'if needed'}`);
+        if (p.flagged) b.append(icon('alert', 'icon icon-sm pill-flag'));
+        return b;
+      })));
+    }
+  }
+
   // Exercises: one chip per session time ("9:30 AM · 1/4"); tapping it lists that session's exercises.
   const exAll = planned.filter((s) => s.kind === 'exercise');
   const exLeft = exAll.filter(isLeft);

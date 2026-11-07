@@ -424,7 +424,8 @@ html[data-theme="dark"] { --k-meds: #a9afe8; --k-move: #f0a26b; --k-ice: #7fc4e6
 /* At a glance */
 .glance { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
 .glance-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; }
-.glance-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: center; }
+.glance-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: start; }
+.glance-label { min-height: 32px; }
 .glance-label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 650; color: var(--muted); }
 .glance-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
 .glance-chip {
@@ -438,7 +439,11 @@ html[data-theme="dark"] { --k-meds: #a9afe8; --k-move: #f0a26b; --k-ice: #7fc4e6
 .glance-chip.pill-upcoming .glance-chip-dot, .glance-chip.pill-open .glance-chip-dot, .glance-chip.pill-info .glance-chip-dot { background: transparent; border: 2px solid var(--pill); }
 .glance-chip.pill-due { box-shadow: 0 0 0 3px var(--c-due-fill); }
 .glance-ok { color: var(--ok); font-size: 0.85rem; font-weight: 650; margin: 0; }
-@media (max-width: 420px) { .glance-row { grid-template-columns: 1fr; gap: 4px; } }
+@media (max-width: 480px) { .glance-row { grid-template-columns: 1fr; gap: 4px; } .glance-label { min-height: 0; } }
+.glance-chip.pill-window { border-style: dashed; }
+.glance-chip.pill-window .glance-chip-dot { background: transparent; border: 2px solid var(--pill); }
+.glance-chip.pill-available { --pill: var(--c-due); --pill-fill: var(--c-due-fill); }
+.glance-chip .pill-flag { margin-left: 2px; }
 
 /* Legend */
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8rem; color: var(--muted); }
