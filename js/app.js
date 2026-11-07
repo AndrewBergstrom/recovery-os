@@ -24,7 +24,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.4.1';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -625,6 +625,16 @@ async function boot() {
   }
   window.addEventListener('hashchange', () => {
     closeAllSheets();
+    // An invite link opened while the app is already running (e.g. tapped from a
+    // message with the PWA open) arrives as a hash change rather than a page load.
+    const late = /[#&]invite=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    if (late) {
+      pendingInvite = late[1];
+      try {
+        sessionStorage.setItem('recovery-os:pending-invite', late[1]);
+      } catch {}
+      history.replaceState(null, '', `${location.pathname}${location.search}#today`);
+    }
     render();
     document.getElementById('main')?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
