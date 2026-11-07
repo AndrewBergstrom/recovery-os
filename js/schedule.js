@@ -248,6 +248,7 @@ export function deriveStatuses(slots, { events = [], slotStates = [], now = Date
 export const STATUS_LABELS = {
   done: 'Done',
   in_progress: 'In progress',
+  partial: 'Partly done',
   todo: 'Not recorded',
   due: 'Due now',
   upcoming: 'Upcoming',

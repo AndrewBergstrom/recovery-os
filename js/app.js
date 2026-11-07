@@ -24,7 +24,7 @@ import { renderOnboarding } from './views/onboarding.js';
 import { openQuickLog } from './views/quick-log.js';
 import { openTextExportSheet } from './views/shared.js';
 
-export const APP_VERSION = '0.4.8';
+export const APP_VERSION = '0.4.9';
 
 const ROUTES = {
   today: { label: 'Calendar', icon: 'plan', render: renderCalendar },
@@ -162,6 +162,20 @@ function render() {
   document.getElementById('app-nav').classList.remove('hidden');
   const route = currentRoute();
   main.replaceChildren(ROUTES[route].render(ctx));
+}
+
+// A sync that lands while a sheet is open must not yank the sheet away; redraw the
+// view underneath as soon as the last sheet closes instead.
+let sheetWatch = null;
+function renderWhenSheetsClose() {
+  if (sheetWatch) return;
+  const started = Date.now();
+  sheetWatch = setInterval(() => {
+    if (document.querySelector('.sheet-wrap') && Date.now() - started < 10 * 60 * 1000) return;
+    clearInterval(sheetWatch);
+    sheetWatch = null;
+    if (!document.querySelector('.sheet-wrap')) ctx.actions.quietRender();
+  }, 500);
 }
 
 async function refresh() {
@@ -593,6 +607,7 @@ async function boot() {
         if (state.meta.activation) onboardingForced = false;
         state.dataLossSuspected = false;
         if (!document.querySelector('.sheet-wrap')) ctx.actions.quietRender();
+        else renderWhenSheetsClose();
         toast(`Synced ${applied} change${applied === 1 ? '' : 's'} from your other device`);
       },
     });

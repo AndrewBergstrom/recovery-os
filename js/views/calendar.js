@@ -168,8 +168,9 @@ function glancePanel(ctx, slots, { selected, today }) {
       .filter(([, group]) => group.some(isLeft))
       .map(([time, group]) => {
         const rank = { in_progress: 0, due: 1, todo: 2, upcoming: 3, open: 4 };
-        const status = group.filter(isLeft).sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9))[0].status;
         const doneN = group.filter((s) => s.status === 'done').length;
+        const worst = group.filter(isLeft).sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9))[0].status;
+        const status = worst === 'in_progress' ? 'in_progress' : doneN ? 'partial' : worst;
         const at = group[0].at;
         const b = el('button', { type: 'button', class: `glance-chip pill-${status}`, 'aria-label': `Exercise session ${formatTime(at, tz)}, ${doneN} of ${group.length} done`, onclick: () => openSessionSheet(ctx, group, at) });
         b.append(el('span', { class: 'glance-chip-dot', 'aria-hidden': 'true' }), `${formatTime(at, tz)} · ${doneN}/${group.length}`);
@@ -225,7 +226,7 @@ function openSessionSheet(ctx, group, at) {
 
 function legend() {
   const item = (status, label) => el('span', { class: `legend-item` }, el('span', { class: `legend-dot pill-${status}` }), label);
-  return el('div', { class: 'legend', 'aria-label': 'Colour key' }, item('done', 'Done'), item('in_progress', 'In progress'), item('todo', 'Not recorded'), item('due', 'Due now'), item('upcoming', 'Upcoming'), item('window', 'As-needed window'));
+  return el('div', { class: 'legend', 'aria-label': 'Colour key' }, item('done', 'Done'), item('in_progress', 'In progress / partly done'), item('todo', 'Not recorded'), item('due', 'Due now'), item('upcoming', 'Upcoming'), item('window', 'As-needed window'));
 }
 
 function dayStrip(ctx, { selected, today }) {
@@ -357,6 +358,7 @@ function exerciseSessions(exSlots, tz) {
     const closed = group.every((x) => x.status === 'done' || x.status === 'skipped');
     const status = group.some((x) => x.status === 'in_progress') ? 'in_progress'
       : closed ? (doneN ? 'done' : 'skipped')
+      : doneN ? 'partial'
       : group.some((x) => x.status === 'due') ? 'due'
       : group.some((x) => x.status === 'todo') ? 'todo'
       : group.some((x) => x.status === 'upcoming') ? 'upcoming'
@@ -515,7 +517,8 @@ export function pill(ctx, slot, { compact = false, big = false, showTime = false
   let meta;
   if (slot.kind === 'exercise_session') {
     const when = slot.at ? formatTime(slot.at, tz) : '';
-    meta = slot.status === 'done' ? `All ${slot.total} done · ${when}` : slot.status === 'skipped' ? 'Skipped' : slot.status === 'in_progress' ? `In progress · ${slot.progress} done` : slot.status === 'todo' ? `Not recorded · ${slot.progress} done` : slot.status === 'due' ? `Due now · ${slot.progress} done` : `${when} · ${slot.total} exercise${slot.total === 1 ? '' : 's'}`;
+    const left = slot.total - slot.doneN;
+    meta = slot.status === 'done' ? `All ${slot.total} done · ${when}` : slot.status === 'skipped' ? 'Skipped' : slot.status === 'in_progress' ? `In progress · ${slot.progress} done` : slot.status === 'partial' ? `${slot.progress} done · ${left} left` : slot.status === 'todo' ? `Not recorded · ${when}` : slot.status === 'due' ? `Due now · ${when}` : `${when} · ${slot.total} exercise${slot.total === 1 ? '' : 's'}`;
   } else switch (slot.status) {
     case 'done': {
       const verb = slot.kind === 'medication' || slot.record_type === 'medication' ? 'Taken' : 'Done';
@@ -580,7 +583,7 @@ export function openSlotSheet(ctx, slot) {
   if (slot.kind === 'exercise_session') return openSessionSheet(ctx, slot.group, slot.at);
   const sheet = openSheet({ title: slot.title, content: null });
   const body = el('div', { class: 'form' });
-  const statusLine = el('div', { class: 'row-between' }, el('span', { class: 'muted' }, slot.at ? `${formatDateStr(slot.date)} · ${formatTime(slot.at, tz)}` : formatDateStr(slot.date)), chip(STATUS_LABELS[slot.status] || slot.status, { done: 'ok', in_progress: 'warning', todo: 'danger', due: 'neutral', skipped: 'muted', upcoming: 'muted', open: 'muted', info: 'muted' }[slot.status] || 'muted'));
+  const statusLine = el('div', { class: 'row-between' }, el('span', { class: 'muted' }, slot.at ? `${formatDateStr(slot.date)} · ${formatTime(slot.at, tz)}` : formatDateStr(slot.date)), chip(STATUS_LABELS[slot.status] || slot.status, { done: 'ok', in_progress: 'warning', partial: 'warning', todo: 'danger', due: 'neutral', skipped: 'muted', upcoming: 'muted', open: 'muted', info: 'muted' }[slot.status] || 'muted'));
   body.append(statusLine);
 
   const defaultOccurred = slot.at && slot.at <= now && now - slot.at < 6 * 3600 * 1000 ? slot.at : now;

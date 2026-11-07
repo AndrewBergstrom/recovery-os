@@ -461,7 +461,7 @@ html[data-theme="dark"] { --k-meds: #a9afe8; --k-move: #f0a26b; --k-ice: #7fc4e6
 .pill-title { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill-meta { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
 .pill-done { --pill: var(--c-done); --pill-fill: var(--c-done-fill); }
-.pill-in_progress { --pill: var(--c-progress); --pill-fill: var(--c-progress-fill); }
+.pill-in_progress, .pill-partial { --pill: var(--c-progress); --pill-fill: var(--c-progress-fill); }
 .pill-todo { --pill: var(--c-todo); --pill-fill: var(--c-todo-fill); }
 .pill-due { --pill: var(--c-due); --pill-fill: var(--c-due-fill); border-width: 3px; box-shadow: 0 0 0 4px var(--c-due-fill); }
 .pill-upcoming, .pill-info, .pill-skipped, .pill-open, .pill-prn { --pill: var(--c-neutral); --pill-fill: var(--c-neutral-fill); }
