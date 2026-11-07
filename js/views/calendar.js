@@ -293,14 +293,20 @@ function dayItems(ctx, dateStr, slots) {
   const { state } = ctx;
   const tz = state.profile.timezone || DEFAULT_TZ;
   const byId = ctx.ordersById();
-  const placed = slots.map((s) => {
-    if (s.status === 'done' && s.event) {
-      const at = fromIso(s.event.occurred_at);
-      return { ...s, at, time: localTimeString(at, tz), allDay: false };
-    }
-    return s;
-  });
-  const used = new Set(placed.filter((s) => s.event).map((s) => s.event.id));
+  const placed = slots
+    .filter((s) => s.kind !== 'exercise')
+    .map((s) => {
+      if (s.status === 'done' && s.event) {
+        const at = fromIso(s.event.occurred_at);
+        return { ...s, at, time: localTimeString(at, tz), allDay: false };
+      }
+      return s;
+    });
+  // All cleared exercises at one routine time are drawn as a single "Exercises" pill
+  // (4 exercises × 3 sessions as 12 look-alike pills was unreadable). Tapping it lists
+  // the session's exercises; statuses and completion still count each exercise.
+  placed.push(...exerciseSessions(slots.filter((s) => s.kind === 'exercise'), tz));
+  const used = new Set(slots.filter((s) => s.event).map((s) => s.event.id));
   const records = currentEvents(state.events)
     .filter((e) => !used.has(e.id) && localDateString(fromIso(e.occurred_at), tz) === dateStr)
     .map((e) => {
@@ -334,6 +340,38 @@ function dayItems(ctx, dateStr, slots) {
   return [...placed, ...records].sort((a, b) => {
     if (!!a.allDay !== !!b.allDay) return a.allDay ? -1 : 1;
     return (a.at || 0) - (b.at || 0) || a.title.localeCompare(b.title);
+  });
+}
+
+/** One composite item per (date, planned time) for the exercise slots of that day. */
+function exerciseSessions(exSlots, tz) {
+  const groups = new Map();
+  for (const x of exSlots) {
+    const key = `${x.date}|${x.time}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(x);
+  }
+  return [...groups.values()].map((group) => {
+    const planned = group[0];
+    const doneN = group.filter((x) => x.status === 'done').length;
+    const closed = group.every((x) => x.status === 'done' || x.status === 'skipped');
+    const status = group.some((x) => x.status === 'in_progress') ? 'in_progress'
+      : closed ? (doneN ? 'done' : 'skipped')
+      : group.some((x) => x.status === 'due') ? 'due'
+      : group.some((x) => x.status === 'todo') ? 'todo'
+      : group.some((x) => x.status === 'upcoming') ? 'upcoming'
+      : 'open';
+    let at = planned.at;
+    let time = planned.time;
+    if (closed) {
+      const last = Math.max(...group.map((x) => (x.event ? fromIso(x.event.occurred_at) : 0)));
+      if (Number.isFinite(last) && last > 0) {
+        at = last;
+        time = localTimeString(last, tz);
+      }
+    }
+    const progress = `${doneN}/${group.length}`;
+    return { id: `session:${planned.date}:${planned.time}`, kind: 'exercise_session', group, status, date: planned.date, at, time, title: 'Exercises', label: `Exercises · ${progress}`, short: 'exercises', sub: `${progress} done`, progress, doneN, total: group.length, optional: false, startable: true, icon: 'move' };
   });
 }
 
@@ -396,7 +434,7 @@ function weekGrid(ctx, { selected, today }) {
     const n = daysBetween(state.profile.surgery_date, d);
     const slots = slotsFor(ctx, d);
     const comp = dayCompletion(slots);
-    const col = el('div', { class: `cal-col${d === today ? ' is-today' : ''}${d === selected ? ' is-selected' : ''}` });
+    const col = el('div', { class: `cal-col${d === today ? ' is-today' : ''}${d === selected ? ' is-selected' : ''}${d < today ? ' is-past' : ''}` });
     col.append(el('button', { type: 'button', class: 'cal-col-head', onclick: () => { u.selectedDate = d; actions.quietRender(); } },
       el('span', { class: 'cal-col-wd', text: formatDateStr(d, { weekday: 'short' }) }),
       el('span', { class: 'cal-col-num', text: String(Number(d.slice(8))) }),
@@ -405,7 +443,15 @@ function weekGrid(ctx, { selected, today }) {
     ));
     const list = el('div', { class: 'cal-col-pills' });
     const items = dayItems(ctx, d, slots);
-    for (const s of items) list.append(pill(ctx, s, { compact: true, showTime: true }));
+    let band = null;
+    for (const s of items) {
+      const b = s.allDay || !s.time ? 'All day' : Number(s.time.slice(0, 2)) < 12 ? 'Morning' : Number(s.time.slice(0, 2)) < 17 ? 'Afternoon' : 'Evening';
+      if (b !== band) {
+        list.append(el('span', { class: 'cal-band', text: b }));
+        band = b;
+      }
+      list.append(pill(ctx, s, { compact: true, showTime: true }));
+    }
     if (!items.length) list.append(el('span', { class: 'muted small', text: d < state.profile.surgery_date ? '—' : 'Nothing planned' }));
     col.append(list);
     cols.append(col);
@@ -467,7 +513,10 @@ export function pill(ctx, slot, { compact = false, big = false, showTime = false
   const tz = state.profile.timezone || DEFAULT_TZ;
   const now = ctx.now();
   let meta;
-  switch (slot.status) {
+  if (slot.kind === 'exercise_session') {
+    const when = slot.at ? formatTime(slot.at, tz) : '';
+    meta = slot.status === 'done' ? `All ${slot.total} done · ${when}` : slot.status === 'skipped' ? 'Skipped' : slot.status === 'in_progress' ? `In progress · ${slot.progress} done` : slot.status === 'todo' ? `Not recorded · ${slot.progress} done` : slot.status === 'due' ? `Due now · ${slot.progress} done` : `${when} · ${slot.total} exercise${slot.total === 1 ? '' : 's'}`;
+  } else switch (slot.status) {
     case 'done': {
       const verb = slot.kind === 'medication' || slot.record_type === 'medication' ? 'Taken' : 'Done';
       meta = slot.event ? `${verb} ${formatTime(fromIso(slot.event.occurred_at), tz)}${slot.sub && slot.unplanned ? ` · ${slot.sub}` : ''}` : 'Done';
@@ -505,13 +554,14 @@ export function pill(ctx, slot, { compact = false, big = false, showTime = false
   const b = el('button', {
     type: 'button',
     class: `pill pill-${slot.status}${slot.unconfirmed && !['done', 'skipped', 'in_progress'].includes(slot.status) ? ' pill-unconfirmed' : ''}${slot.optional ? ' pill-optional' : ''}${compact ? ' pill-compact' : ''}${big ? ' pill-big' : ''}`,
-    'aria-label': `${slot.title}${slot.at ? `, ${formatTime(slot.at, tz)}` : ''}, ${STATUS_LABELS[slot.status] || slot.status}`,
+    'aria-label': `${slot.title}${slot.at ? `, ${formatTime(slot.at, tz)}` : ''}${slot.progress ? `, ${slot.doneN} of ${slot.total} done` : ''}, ${STATUS_LABELS[slot.status] || slot.status}`,
+    'data-icon': slot.icon || 'note',
     onclick: () => openSlotSheet(ctx, slot),
   });
   b.append(el('span', { class: 'pill-dot', 'aria-hidden': 'true' }, slot.status === 'done' ? icon('check', 'icon icon-sm') : slot.status === 'in_progress' ? icon('pulse', 'icon icon-sm') : icon(slot.icon, 'icon icon-sm')));
   const text = el('span', { class: 'pill-text' });
   text.append(el('span', { class: 'pill-title', text: compact ? cap(slot.short) : slot.label || slot.title }));
-  if (compact && showTime && slot.at) text.append(el('span', { class: 'pill-meta', text: `${formatTime(slot.at, tz)}${slot.status === 'done' ? ' ✓' : slot.status === 'todo' ? ' · not recorded' : slot.status === 'in_progress' ? ' · in progress' : ''}` }));
+  if (compact && showTime && slot.at) text.append(el('span', { class: 'pill-meta', text: `${formatTime(slot.at, tz)}${slot.progress ? ` · ${slot.progress}` : ''}${slot.status === 'done' ? ' ✓' : slot.status === 'todo' ? ' · not recorded' : slot.status === 'in_progress' ? ' · in progress' : ''}` }));
   else text.append(el('span', { class: 'pill-meta', text: meta }));
   b.append(text);
   return b;
@@ -527,6 +577,7 @@ export function openSlotSheet(ctx, slot) {
     const p = prnPills(state, slot.date, { tz, now }).find((x) => x.ref_id === slot.ref_id);
     if (p) return openPrnSheet(ctx, p);
   }
+  if (slot.kind === 'exercise_session') return openSessionSheet(ctx, slot.group, slot.at);
   const sheet = openSheet({ title: slot.title, content: null });
   const body = el('div', { class: 'form' });
   const statusLine = el('div', { class: 'row-between' }, el('span', { class: 'muted' }, slot.at ? `${formatDateStr(slot.date)} · ${formatTime(slot.at, tz)}` : formatDateStr(slot.date)), chip(STATUS_LABELS[slot.status] || slot.status, { done: 'ok', in_progress: 'warning', todo: 'danger', due: 'neutral', skipped: 'muted', upcoming: 'muted', open: 'muted', info: 'muted' }[slot.status] || 'muted'));
