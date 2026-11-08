@@ -41,8 +41,21 @@ export const STATUS_LABELS = {
   confirmed: { text: 'Scheduled · confirmed', tone: 'ok' },
 };
 
-export function statusLabel(order) {
+/**
+ * Status chip for an order. A prescriber-confirmation hold that hangs on a linked
+ * question (ibuprofen ↔ aspirin) lifts once the patient has recorded the answer.
+ */
+export function statusLabel(order, questions = []) {
+  if (order.status === 'needs_prescriber_confirmation' && prescriberHoldResolved(order, questions)) {
+    return { text: 'As needed · confirmed with prescriber', tone: 'ok' };
+  }
   return STATUS_LABELS[order.status] || { text: order.status, tone: 'neutral' };
+}
+
+export function prescriberHoldResolved(order, questions = []) {
+  const ids = (order.interaction_flags || []).map((f) => f.question_id).filter(Boolean);
+  if (!ids.length) return false;
+  return ids.every((id) => (questions || []).find((q) => q.id === id)?.status === 'resolved');
 }
 
 /** Most recent current medication event with status "taken" for a medication. */

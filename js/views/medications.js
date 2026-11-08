@@ -24,7 +24,7 @@ export function renderMedications(ctx) {
   view.append(
     el('div', { class: 'card-stack' },
       meds.map((m) => {
-        const st = statusLabel(m);
+        const st = statusLabel(m, state.questions);
         const last = lastConfirmedDose(state.events, m.id);
         const card = el('div', { class: `card${st.tone === 'warning' ? ' card-warning' : ''}` });
         card.append(el('div', { class: 'card-title' }, `${m.name} ${m.display_strength}`, chip(st.text, st.tone)));
@@ -42,7 +42,7 @@ export function renderMedications(ctx) {
         if (isPrn(m)) meta.append(el('span', { class: 'small', text: 'As needed: available to log if taken. Never shown as due or missed.' }));
         if (acetIds.includes(m.id)) meta.append(el('span', {}, el('strong', { text: 'Recorded in the preceding 24 h: ' }), `${acetTotal.toLocaleString('en-US')} mg of ${ACETAMINOPHEN_ROLLING_MAX_MG.toLocaleString('en-US')} mg (rolling, recorded entries only)`));
         card.append(meta);
-        for (const n of interactionNotices(m, state.orders)) card.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { text: n.message })));
+        for (const n of interactionNotices(m, state.orders, state.questions)) card.append(el('div', { class: n.resolved ? 'banner banner-info' : 'banner banner-warning' }, icon(n.resolved ? 'check' : 'alert'), el('span', { text: n.message })));
         if (m.notes?.length) card.append(el('details', { class: 'plain' }, el('summary', { text: 'Notes and safeguards' }), el('div', { class: 'details-body' }, el('ul', { class: 'small' }, m.notes.map((n) => el('li', { text: n }))))));
         const actionsRow = el('div', { class: 'card-actions' });
         if (isScheduled(m)) actionsRow.append(button(isScheduleConfirmed(m) ? 'Edit schedule' : 'Confirm schedule', { variant: isScheduleConfirmed(m) ? 'secondary' : 'warning', onClick: () => openScheduleSheet(ctx, m) }));

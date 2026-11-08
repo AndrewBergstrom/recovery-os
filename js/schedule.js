@@ -13,7 +13,7 @@
 //
 // PRN medicines never become slots: they are offered, never due.
 
-import { activeOrders, isScheduled, isScheduleConfirmed, lastConfirmedDose, medicationEventsFor, predictNextDose, intervalHoursFor } from './medications.js';
+import { activeOrders, isScheduled, isScheduleConfirmed, lastConfirmedDose, medicationEventsFor, predictNextDose, intervalHoursFor, prescriberHoldResolved } from './medications.js';
 import { partitionExercises } from './exercises.js';
 import { currentEvents } from './events.js';
 import { zonedToUtc, localDateString, localTimeString, fromIso, addDays, formatDateStr, DEFAULT_TZ } from './time.js';
@@ -285,6 +285,6 @@ export function prnPills(state, dateStr, { tz = DEFAULT_TZ, now = Date.now() } =
       const todayDoses = doses.filter((e) => localDateString(fromIso(e.occurred_at), tz) === dateStr);
       const last = lastConfirmedDose(state.events, m.id);
       const prediction = predictNextDose(m, state.events, now, tz);
-      return { id: `prn:${m.id}`, kind: 'prn', ref_id: m.id, order: m, title: `${m.name} ${m.display_strength}`, short: m.short_name || m.name, count: todayDoses.length, last, prediction, flagged: !!(m.interaction_flags && m.interaction_flags.length) || m.status === 'needs_prescriber_confirmation' };
+      return { id: `prn:${m.id}`, kind: 'prn', ref_id: m.id, order: m, title: `${m.name} ${m.display_strength}`, short: m.short_name || m.name, count: todayDoses.length, last, prediction, flagged: (!!(m.interaction_flags && m.interaction_flags.length) || m.status === 'needs_prescriber_confirmation') && !prescriberHoldResolved(m, state.questions) };
     });
 }

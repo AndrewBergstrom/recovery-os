@@ -110,12 +110,18 @@ export function perDoseCheck(order, quantity) {
 }
 
 /** Interaction notices declared on an order (e.g. ibuprofen → aspirin). Shown on the flagged order only. */
-export function interactionNotices(order, orders) {
+export function interactionNotices(order, orders, questions = []) {
   const active = activeOrders(orders, 'medication');
   const out = [];
   for (const flag of order?.interaction_flags || []) {
     const other = active.find((o) => o.id === flag.with);
-    if (other) out.push({ with: other, message: flag.message });
+    if (!other) continue;
+    // Once the patient has recorded a clinician's answer to the linked question, the
+    // notice reports that answer instead of still demanding confirmation.
+    const q = flag.question_id ? (questions || []).find((x) => x.id === flag.question_id) : null;
+    if (q && q.status === 'resolved' && q.resolution) {
+      out.push({ with: other, resolved: true, message: `${order.short_name || order.name} + ${other.short_name || other.name} together: confirmed “${q.resolution.value}” by ${q.resolution.confirmed_by || 'clinician'} on ${q.resolution.confirmed_on || '?'}${q.resolution.source ? ` (${q.resolution.source})` : ''}. The bottle sticker still says to check before combining; that is what this record is.` });
+    } else out.push({ with: other, resolved: false, message: flag.message });
   }
   return out;
 }

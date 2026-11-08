@@ -78,9 +78,9 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
   let quantity = selected ? selected.default_quantity || 1 : null;
 
   const options = meds.map((m) => {
-    const st = statusLabel(m);
+    const st = statusLabel(m, ctx.state.questions);
     const last = lastConfirmedDose(ctx.state.events, m.id);
-    const notices = interactionNotices(m, ctx.state.orders);
+    const notices = interactionNotices(m, ctx.state.orders, ctx.state.questions).filter((n) => !n.resolved);
     return {
       id: m.id,
       label: `${m.name} ${m.display_strength}`,
@@ -164,8 +164,8 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
         warnings.append(el('div', { class: 'warning-box' }, el('strong', {}, icon('alert', 'icon icon-sm'), ' Possible duplicate'), el('span', { text: `${selected.name} was already recorded ${dup.minutes_apart} min from this time (${formatTime(fromIso(dup.prior.occurred_at), tz)}). If this is the same dose, go back and cancel.` }), el('label', { class: 'check' }, ackDup, el('span', { text: 'This is a separate dose' }))));
       } else ackDup.checked = false;
     }
-    for (const n of interactionNotices(selected, ctx.state.orders)) {
-      warnings.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { text: n.message })));
+    for (const n of interactionNotices(selected, ctx.state.orders, ctx.state.questions)) {
+      warnings.append(el('div', { class: n.resolved ? 'banner banner-info' : 'banner banner-warning' }, icon(n.resolved ? 'check' : 'alert'), el('span', { text: n.message })));
     }
     if (selected.status === 'needs_schedule_confirmation') warnings.append(el('p', { class: 'muted small', text: 'This records a dose you took. It does not confirm the schedule — do that from Medications.' }));
     submit.disabled = false;
@@ -181,7 +181,7 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
   // When a medication was chosen from a card, show it compactly so "Record" is within reach.
   const medWrap = el('div', { class: 'field' }, el('span', { class: 'field-label', text: 'Medication' }));
   if (selected) {
-    const st = statusLabel(selected);
+    const st = statusLabel(selected, ctx.state.questions);
     medWrap.append(
       el('div', { class: 'summary-box' },
         el('div', { class: 'row-between' },

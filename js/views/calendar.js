@@ -638,7 +638,7 @@ export function openSlotSheet(ctx, slot) {
       body.append(el('p', {}, el('strong', { text: 'Prescribed: ' }), m.directions));
       const last = lastConfirmedDose(state.events, m.id);
       body.append(el('p', { class: 'muted small', text: `Last confirmed taken: ${last ? describeWhen(fromIso(last.occurred_at), now, tz) : 'Not recorded'}` }));
-      for (const n of interactionNotices(m, state.orders)) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { text: n.message })));
+      for (const n of interactionNotices(m, state.orders, state.questions)) body.append(el('div', { class: n.resolved ? 'banner banner-info' : 'banner banner-warning' }, icon(n.resolved ? 'check' : 'alert'), el('span', { text: n.message })));
       if (slot.unconfirmed) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', {}, el('strong', { text: 'Placeholder time. ' }), slot.shifted_from ? `Moved from ${formatTime(zonedToUtc(slot.date, slot.shifted_from, tz), tz)} because ${slot.sub}. ` : '', 'The schedule has not been confirmed yet — confirm the course start and exact times from Medications, or just record what you took.')));
       if (slot.status === 'todo') body.append(el('p', { class: 'muted small', text: 'Nothing was recorded for this slot. If you are not sure whether you took it, check the label or ask the pharmacist — never double up.' }));
       body.append(el('p', { class: 'strong', text: `Did you take ${m.name} ${m.display_strength}?` }));
@@ -711,7 +711,7 @@ function openPrnSheet(ctx, p) {
     const pr = p.prediction;
     body.append(el('div', { class: pr.available ? 'summary-box' : 'warning-box' }, el('strong', { text: pr.available ? `Next dose: available now (if needed)` : `Next dose: not before ${describeWhen(pr.at, now, tz)}` }), el('span', { class: 'small', text: `Label interval: every ${pr.hours}${pr.max_hours ? `–${pr.max_hours}` : ''} hours. Last recorded dose ${relativeAgo(fromIso(pr.basis.occurred_at), now)} (${formatTime(fromIso(pr.basis.occurred_at), tz)}). Recorded entries only — if you took one you didn't log, add it first.` })));
   } else if (!p.last) body.append(el('p', { class: 'muted small', text: `No dose recorded yet. Once you log one, the next earliest time (${m.schedule?.min_interval_hours || '?'} h later) appears on the calendar.` }));
-  for (const n of interactionNotices(m, state.orders)) body.append(el('div', { class: 'banner banner-warning' }, icon('alert'), el('span', { text: n.message })));
+  for (const n of interactionNotices(m, state.orders, state.questions)) body.append(el('div', { class: n.resolved ? 'banner banner-info' : 'banner banner-warning' }, icon(n.resolved ? 'check' : 'alert'), el('span', { text: n.message })));
   body.append(el('div', { class: 'btn-row' }, button(`Log ${p.short}`, { variant: 'primary', icon: 'check', onClick: () => { sheet.close('handoff'); actions.openQuickLog({ type: 'medication', medication_id: m.id, source: 'calendar' }); } }), button('Not now', { variant: 'ghost', onClick: () => sheet.close('later') })));
   sheet.setContent(body);
   return sheet;

@@ -117,7 +117,7 @@ export const orders = [
     default_quantity: 1,
     quantity_options: [1],
     rolling_24h_max_mg: 2400,
-    interaction_flags: [{ with: 'med-aspirin-81', message: 'Aspirin–ibuprofen interaction: prescriber/pharmacist confirmation required before use.' }],
+    interaction_flags: [{ with: 'med-aspirin-81', question_id: 'aspirin-ibuprofen', message: 'Aspirin–ibuprofen interaction: prescriber/pharmacist confirmation required before use.' }],
     notes: ['Not auto-scheduled.', 'Take with food per the prescription.'],
   }),
   med({
