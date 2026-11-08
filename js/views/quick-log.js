@@ -5,7 +5,7 @@ import { el, chip, button, field, icon, openSheet, segmented, radioCards, uid } 
 import { createEvent, validateEvent } from '../events.js';
 import { activeOrders, isPrn, statusLabel, totalMg, lastConfirmedDose } from '../medications.js';
 import { partitionExercises, SYMPTOM_RESPONSES, SESSION_OUTCOMES } from '../exercises.js';
-import { acetaminophenCheck, orderRollingCheck, duplicateCheck, interactionNotices, HIGH_PRIORITY_SYMPTOMS, escalationFor, acetaminophenIds } from '../safety-rules.js';
+import { acetaminophenCheck, orderRollingCheck, duplicateCheck, intervalCheck, perDoseCheck, interactionNotices, HIGH_PRIORITY_SYMPTOMS, escalationFor, acetaminophenIds } from '../safety-rules.js';
 import { fromIso, describeWhen, formatTime, DEFAULT_TZ } from '../time.js';
 import { timePicker, enteredBy, exerciseGuideBlock } from './shared.js';
 
@@ -94,6 +94,8 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
   const warnings = el('div', { class: 'form' });
   const ackDup = el('input', { type: 'checkbox' });
   const ackMax = el('input', { type: 'checkbox' });
+  const ackSoon = el('input', { type: 'checkbox' });
+  const ackQty = el('input', { type: 'checkbox' });
   const time = timePicker(ctx, init.occurred_ms || ctx.now(), { label: 'Taken at', hint: 'The actual time you took it, not the scheduled time.' });
   const pain = segmented(
     [{ id: '', label: 'Skip' }, ...Array.from({ length: 11 }, (_, i) => ({ id: String(i), label: String(i) }))],
@@ -109,7 +111,8 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
   const renderQty = () => {
     qtyWrap.replaceChildren();
     if (!selected) return;
-    const opts = [...new Set([...(selected.quantity_options || [1]), 1, 2])].sort((a, b) => a - b).map((q) => ({ id: String(q), label: `${q} ${selected.unit || 'tablet'}${q === 1 ? '' : 's'}` }));
+    const allowed = selected.quantity_options?.length ? selected.quantity_options : [1];
+    const opts = [...new Set([...allowed, Math.max(...allowed) + 1])].sort((a, b) => a - b).map((q) => ({ id: String(q), label: `${q} ${selected.unit || 'tablet'}${q === 1 ? '' : 's'}${allowed.includes(q) ? '' : ' (above the order)'}` }));
     const seg = segmented(opts, String(quantity), (v) => {
       quantity = Number(v);
       renderSummary();
@@ -145,7 +148,18 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
           warnings.append(el('div', { class: 'warning-box', role: 'alert' }, el('strong', {}, icon('alert', 'icon icon-sm'), ' Above the 24-hour maximum on the label'), el('span', { text: `Recorded ${selected.name} would be ${r.projected_mg.toLocaleString('en-US')} mg in the preceding 24 h (label max ${r.max_mg.toLocaleString('en-US')} mg). Check with a pharmacist or clinician.` }), el('label', { class: 'check' }, ackMax, el('span', { text: 'I understand — record what I actually took anyway' }))));
         }
       }
-      const dup = duplicateCheck(ctx.state.events, selected.id, ms);
+      const soon = intervalCheck(ctx.state.events, selected, ms);
+      const dupNow = duplicateCheck(ctx.state.events, selected.id, ms);
+      if (soon && !dupNow.possible) {
+        needAck = true;
+        warnings.append(el('div', { class: 'warning-box', role: 'alert' }, el('strong', {}, icon('alert', 'icon icon-sm'), soon.prn ? ' Sooner than the label interval' : ' Closer together than scheduled'), el('span', { text: `${selected.name} was recorded at ${formatTime(fromIso(soon.prior.occurred_at), tz)}. The label says every ${soon.label_hours} h${soon.prn ? '' : ' (twice-daily spacing)'}, so the earliest next dose is ${formatTime(soon.earliest, tz)} — this one is ${soon.minutes_early} min early. Check with a pharmacist or clinician before taking it.` }), el('label', { class: 'check' }, ackSoon, el('span', { text: 'I understand — record what I actually took anyway' }))));
+      } else ackSoon.checked = false;
+      const over = perDoseCheck(selected, quantity);
+      if (over) {
+        needAck = true;
+        warnings.append(el('div', { class: 'warning-box', role: 'alert' }, el('strong', {}, icon('alert', 'icon icon-sm'), ' More than the order allows per dose'), el('span', { text: `The order says up to ${over.max_quantity} ${selected.unit || 'tablet'}${over.max_quantity === 1 ? '' : 's'} per dose; this records ${over.attempted}. Check with a pharmacist or clinician.` }), el('label', { class: 'check' }, ackQty, el('span', { text: 'I understand — record what I actually took anyway' }))));
+      } else ackQty.checked = false;
+      const dup = dupNow;
       if (dup.possible) {
         warnings.append(el('div', { class: 'warning-box' }, el('strong', {}, icon('alert', 'icon icon-sm'), ' Possible duplicate'), el('span', { text: `${selected.name} was already recorded ${dup.minutes_apart} min from this time (${formatTime(fromIso(dup.prior.occurred_at), tz)}). If this is the same dose, go back and cancel.` }), el('label', { class: 'check' }, ackDup, el('span', { text: 'This is a separate dose' }))));
       } else ackDup.checked = false;
@@ -196,6 +210,8 @@ function medicationForm(ctx, init, { onRecord, onBack }) {
         const exceeds = isAcet ? acetaminophenCheck(ctx.state.events, ctx.state.orders, mg, ms).exceeds : orderRollingCheck(ctx.state.events, selected, mg, ms)?.exceeds;
         if (exceeds && !ackMax.checked) throw new Error('Tick the acknowledgement to record a dose above the 24-hour maximum, or go back.');
         if (duplicateCheck(ctx.state.events, selected.id, ms).possible && !ackDup.checked) throw new Error('Possible duplicate: tick “This is a separate dose” or go back.');
+        if (intervalCheck(ctx.state.events, selected, ms) && !duplicateCheck(ctx.state.events, selected.id, ms).possible && !ackSoon.checked) throw new Error('This dose is sooner than the label interval: tick the acknowledgement to record it anyway, or go back.');
+        if (perDoseCheck(selected, quantity) && !ackQty.checked) throw new Error('This is more than the order allows per dose: tick the acknowledgement to record it anyway, or go back.');
         const ev = createEvent(
           {
             event_type: 'medication',

@@ -74,6 +74,41 @@ export function duplicateCheck(events, medicationId, occurredAt, windowMinutes =
   return closest ? { possible: true, prior: closest.event, minutes_apart: Math.round(closest.gap_ms / 60000) } : { possible: false };
 }
 
+/**
+ * Too-soon check against the label interval. PRN orders use their minimum interval
+ * ("every 4–6 hours" → 4 h); scheduled orders use half the dosing interval as a
+ * data-entry sanity check (twice daily → 6 h). Returns the most recent prior dose
+ * inside that window, or null. A warning, never a block: what was taken gets recorded.
+ */
+export function intervalCheck(events, order, attemptAt) {
+  if (!order?.schedule) return null;
+  const prn = order.schedule.kind === 'prn';
+  const labelHours = prn ? order.schedule.min_interval_hours : SCHEDULED_HOURS[order.schedule.frequency];
+  if (!labelHours) return null;
+  const windowHours = prn ? labelHours : labelHours / 2;
+  const windowMs = windowHours * 3600 * 1000;
+  let prior = null;
+  for (const e of currentEvents(events)) {
+    if (e.event_type !== 'medication' || e.medication_id !== order.id || e.status !== 'taken') continue;
+    const t = fromIso(e.occurred_at);
+    if (t <= attemptAt && attemptAt - t < windowMs && (!prior || t > fromIso(prior.occurred_at))) prior = e;
+  }
+  if (!prior) return null;
+  const earliest = fromIso(prior.occurred_at) + labelHours * 3600 * 1000;
+  return { prior, label_hours: labelHours, earliest, minutes_early: Math.round((earliest - attemptAt) / 60000), prn };
+}
+const SCHEDULED_HOURS = { 'once daily': 24, 'twice daily': 12, 'three times daily': 8, 'four times daily': 6 };
+
+/**
+ * Per-dose check against the order's allowed quantities ("1–2 tablets" → max 2).
+ * Returns null when within the order, otherwise the maximum the order allows.
+ */
+export function perDoseCheck(order, quantity) {
+  const allowed = order?.quantity_options?.length ? Math.max(...order.quantity_options) : null;
+  if (!allowed || !(Number(quantity) > allowed)) return null;
+  return { max_quantity: allowed, attempted: Number(quantity) };
+}
+
 /** Interaction notices declared on an order (e.g. ibuprofen → aspirin). Shown on the flagged order only. */
 export function interactionNotices(order, orders) {
   const active = activeOrders(orders, 'medication');

@@ -112,3 +112,28 @@ test('missing values are labelled "Not recorded"', () => {
   assert.equal(recordedLabel(''), 'Not recorded');
   assert.equal(recordedLabel(4, (v) => `${v}/10`), '4/10');
 });
+
+test('too-soon check: PRN uses the label minimum interval, scheduled uses half the dosing interval', async () => {
+  const { intervalCheck, perDoseCheck } = await import('../js/safety-rules.js');
+  const { orders } = await import('../js/seed.js');
+  const oxy = orders.find((o) => o.id === 'med-oxycodone-5');
+  const asp = orders.find((o) => o.id === 'med-aspirin-81');
+  const ibu = orders.find((o) => o.id === 'med-ibuprofen-400');
+  const t0 = Date.parse('2026-11-07T18:00:00.000Z');
+  const taken = (id, at) => ({ id: `e-${id}-${at}`, event_type: 'medication', status: 'taken', medication_id: id, occurred_at: new Date(at).toISOString(), total_mg: 5 });
+  const events = [taken('med-oxycodone-5', t0), taken('med-aspirin-81', t0)];
+  // oxycodone every 4–6 h: 2 h later is too soon, 4 h later is fine
+  const soon = intervalCheck(events, oxy, t0 + 2 * 3600e3);
+  assert.ok(soon && soon.prn && soon.label_hours === 4 && soon.minutes_early === 120);
+  assert.equal(intervalCheck(events, oxy, t0 + 4 * 3600e3), null);
+  // aspirin twice daily: 3 h later is closer than scheduled, 7 h later is not flagged
+  const close = intervalCheck(events, asp, t0 + 3 * 3600e3);
+  assert.ok(close && !close.prn && close.label_hours === 12);
+  assert.equal(intervalCheck(events, asp, t0 + 7 * 3600e3), null);
+  // a dose recorded before the prior one is never "too soon" relative to it
+  assert.equal(intervalCheck(events, oxy, t0 - 3600e3), null);
+  // per-dose: ibuprofen is 1 tablet per dose, oxycodone allows 2
+  assert.deepEqual(perDoseCheck(ibu, 2), { max_quantity: 1, attempted: 2 });
+  assert.equal(perDoseCheck(oxy, 2), null);
+  assert.deepEqual(perDoseCheck(oxy, 3), { max_quantity: 2, attempted: 3 });
+});
