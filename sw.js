@@ -2,7 +2,7 @@
    Only static assets are cached. No data ever passes through here.
    Bump CACHE_VERSION whenever any file in ASSETS changes. */
 
-const CACHE_VERSION = 'recovery-os-v0.4.15';
+const CACHE_VERSION = 'recovery-os-v0.4.16';
 const ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,8 @@ const ASSETS = [
   './js/db.js',
   './js/events.js',
   './js/exercise-guides.js',
+  './js/pt-schedule.js',
+  './js/views/pt-schedule.js',
   './js/exercises.js',
   './js/export-import.js',
   './js/medications.js',

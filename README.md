@@ -92,6 +92,7 @@ A care partner gets their own login through an invite link (no email needed), se
 | Exports in embedded viewers | Export sheets offer **Copy** as well as **Download**, because some viewers block downloads |
 | Sample data | Loaded only on request from Settings, tagged `created_by: "sample"`, contains no medication doses |
 | Exercise sessions | Drawn as one pill per routine time; status = in progress > all done > partly done (amber) > due > not recorded > upcoming. Completion still counts each exercise |
+| PT schedule | `js/pt-schedule.js` + `js/views/pt-schedule.js` — Plan tab card: next visit highlighted, every PT visit by month with weekday, date and time; PT visits are recognised by title ("PT", "physical therapy", "HiDEF") and kept out of the general Appointments list |
 | Exercise guides | `js/exercise-guides.js` — original line diagrams + steps per seeded exercise; steps never add reps, sets, holds or ranges (a test enforces it) |
 | Surgery day | Routine slots are optional that day: loggable, never red, not counted |
 | Service worker | Fetches with `cache: 'no-cache'` and precaches with `cache: 'reload'`, so a deploy lands on the next load despite GitHub Pages' 10-minute HTTP cache |
@@ -103,7 +104,7 @@ A care partner gets their own login through an invite link (no email needed), se
 index.html  styles.css  manifest.webmanifest  sw.js  package.json
 icons/            PNG icons (generated, abstract mark)
 js/               app.js db.js events.js schedule.js sync.js push.js reminders-due.js config.js medications.js
-                  exercises.js exercise-guides.js safety-rules.js reminders.js export-import.js time.js ui.js prefs.js
+                  exercises.js exercise-guides.js pt-schedule.js safety-rules.js reminders.js export-import.js time.js ui.js prefs.js
                   seed.js sample-data.js
 js/views/         calendar medications movement progress plan more onboarding quick-log shared sync-ui care-ui
 supabase/         schema.sql  02_care_circle_and_reminders.sql  functions/reminders/  README.md

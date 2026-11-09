@@ -9,6 +9,8 @@ import { activeOrders } from '../medications.js';
 import { weightBearingState } from '../safety-rules.js';
 import { milestoneDate } from '../schedule.js';
 import { statusChipFor, eventList, kv } from './shared.js';
+import { ptScheduleCard } from './pt-schedule.js';
+import { isPtVisit } from '../pt-schedule.js';
 
 export { milestoneDate };
 
@@ -112,8 +114,9 @@ export function renderPlan(ctx) {
     )
   );
 
-  // Appointments
-  const appts = [...state.appointments].sort((a, b) => (a.at < b.at ? -1 : 1));
+  // PT schedule (at a glance), then the other appointments
+  view.append(ptScheduleCard(ctx, { onEdit: (v) => openAppointmentSheet(ctx, state.appointments.find((a) => a.id === v.id) || v) }));
+  const appts = state.appointments.filter((a) => !isPtVisit(a)).sort((a, b) => (a.at < b.at ? -1 : 1));
   view.append(
     el('div', { class: 'card' },
       el('div', { class: 'section-head' }, el('h2', { class: 'card-title', text: 'Appointments' }), button('Add', { icon: 'plus', cls: 'small', onClick: () => openAppointmentSheet(ctx) })),

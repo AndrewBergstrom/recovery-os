@@ -610,3 +610,18 @@ html[data-theme="dark"] { --k-meds: #a9afe8; --k-move: #f0a26b; --k-ice: #7fc4e6
 .doc-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin: 8px 0 12px; }
 .doc-table th, .doc-table td { text-align: left; vertical-align: top; padding: 8px 8px; border-bottom: 1px solid var(--border); }
 .doc-table th { color: var(--muted); font-weight: 650; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* PT schedule card */
+.pt-next { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 12px; background: var(--primary-soft); color: var(--text); border-left: 5px solid var(--primary); }
+.pt-next-label { font-size: 0.8rem; font-weight: 650; letter-spacing: 0.02em; color: var(--primary); text-transform: uppercase; }
+.pt-next-when { font-size: 1.25rem; }
+.pt-next-rel { font-size: 0.95rem; color: var(--muted); }
+.pt-month { font-size: 0.85rem; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 4px; }
+.pt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pt-row { display: grid; grid-template-columns: 6.2rem 5.2rem 1fr; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px 10px; text-align: left; font: inherit; color: inherit; background: transparent; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.pt-row.is-next { border: 2px solid var(--primary); background: var(--primary-soft); }
+.pt-row.is-past { opacity: 0.6; }
+.pt-date { display: flex; gap: 6px; font-weight: 600; }
+.pt-dow { min-width: 2.2rem; color: var(--primary); }
+.pt-time { font-variant-numeric: tabular-nums; }
+.pt-num { display: flex; align-items: center; justify-content: flex-end; gap: 4px; color: var(--muted); font-size: 0.85rem; }
